@@ -52,8 +52,8 @@ def test_push_sends_card_with_agentid_and_touser(server, cfg, outcomes):
     body = sent_bodies(server)[0]
     assert body['agentid'] == 1000002
     assert body['touser'] == 'zhangsan'
-    assert body['msgtype'] == 'template_card'
-    assert 'WPS 灵犀' in str(body['template_card'])
+    assert body['msgtype'] == 'markdown'
+    assert 'WPS 灵犀' in body['markdown']['content']
 
 
 def test_token_cached_between_pushes(server, cfg, outcomes):

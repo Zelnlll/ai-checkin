@@ -15,33 +15,40 @@ logger = logging.getLogger(__name__)
 _STATE_ICON = {'ok': '✅', 'already': '✔', 'busy': '⏳', 'error': '❌'}
 
 
-def _row_value(outcome: CheckinOutcome) -> str:
+def _row_title(outcome: CheckinOutcome) -> str:
+    try:
+        title = get_adapter(outcome.platform).title
+    except KeyError:
+        title = outcome.platform
+    icon = _STATE_ICON.get(outcome.result.state, '❓')
+    return f'{icon} **{title}**'
+
+
+def _row_desc(outcome: CheckinOutcome) -> str:
     r = outcome.result
-    icon = _STATE_ICON.get(r.state, '❓')
-    if r.state == 'ok':
-        return f'{icon} 成功 {r.reward or r.message}'.strip()
-    if r.state == 'already':
-        return f'{icon} 已签到 {r.reward}'.strip()
-    return f'{icon} 失败：{r.message}'
+    if r.state == 'error':
+        return f'<font color="warning">{r.message[:60]}</font>'
+    if r.state == 'busy':
+        return f'<font color="comment">{r.message[:60]}</font>'
+    return r.reward or r.message[:60]
 
 
-def build_card(outcomes: list[CheckinOutcome], today: str) -> dict[str, Any]:
+def build_markdown(outcomes: list[CheckinOutcome], today: str) -> dict[str, Any]:
     failed = [o for o in outcomes if o.result.state == 'error']
-    rows = []
+    done_count = sum(1 for o in outcomes if o.result.done())
+    n = len(outcomes)
+    if failed:
+        head = f'**{today} · <font color="warning">有失败 {done_count}/{n}</font>**'
+    else:
+        head = f'**{today} · <font color="info">全部成功 {done_count}/{n}</font>**'
+    lines = ['# 📋 AI 平台签到', head, '']
+    rewards = [o.result.reward for o in outcomes if o.result.reward]
+    if rewards:
+        lines.append(f'> 战利品：{" · ".join(rewards)}')
+        lines.append('')
     for o in outcomes:
-        try:
-            title = get_adapter(o.platform).title
-        except KeyError:
-            title = o.platform
-        rows.append({'keyname': title, 'value': _row_value(o)})
-    return {'template_card': {
-        'card_type': 'text_notice',
-        'main_title': {'title': '每日签到 · 有失败' if failed else '每日签到 · 全部成功'},
-        'sub_title_text': today,
-        'horizontal_content_list': rows,
-        'card_action': {'type': 1, 'url': 'https://qyapi.weixin.qq.com'},
-        **({'emphasis_indicator': 1} if failed else {}),
-    }}
+        lines.append(f'{_row_title(o)}　{_row_desc(o)}')
+    return {'msgtype': 'markdown', 'markdown': {'content': chr(10).join(lines)}}
 
 
 class WeComNotifier:
@@ -54,7 +61,7 @@ class WeComNotifier:
         if not self._webhook:
             logger.warning('WECOM_WEBHOOK 未配置，跳过推送')
             return False
-        payload = {'msgtype': 'template_card', **build_card(outcomes, today)}
+        payload = build_markdown(outcomes, today)
         try:
             resp = self._post('POST', self._webhook, {}, body=payload)
         except Exception as exc:

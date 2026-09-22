@@ -10,8 +10,9 @@
 - **重试**：失败/服务器拥挤按 `RETRY_TIMES` 指数退避重试（10s/20s/40s）；
   凭证失效（auth 类）不重试，直接告警。
 - **请求日志**：每次尝试追加 `data/logs/requests.log`（JSON 行）。
-- **通知**：企微 `template_card`（text_notice）汇总卡：平台、日期、
-  ✅成功/✔已签到/❌失败、奖励数值、失败原因；有失败时卡片标红。
+- **通知**：企微 markdown 彩色汇总消息：标题+日期、完成数（绿=全成/红=有失败）、
+  "战利品"引用行（聚合各平台奖励）、每平台一行 ✅成功/✔已签/⏳待重试/❌失败+奖励/原因。
+  （曾用 template_card 模板卡，因官方 vertical_content_list 上限 3 条弃用。）
   双通道：**群机器人 Webhook**（`WECOM_WEBHOOK`）或**自建应用**
   （`WECOM_CORP_ID/SECRET/AGENT_ID` + `WECOM_TO_USER`/`WECOM_CHAT_ID`，
   access_token 自动缓存与失效刷新；应用通道配置齐全时优先）。

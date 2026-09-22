@@ -1,4 +1,4 @@
-"""企业微信自建应用通道：gettoken 缓存 + message/send template_card。
+"""企业微信自建应用通道：gettoken 缓存 + message/send markdown。
 
 目标二选一：WECOM_CHAT_ID（应用会话群）优先，否则 WECOM_TO_USER（成员 userid）。
 access_token 缓存于 DATA_DIR/wecom_app_token.json，失效（40001/42001）自动重取并重试一次。
@@ -13,7 +13,7 @@ import time
 from typing import Any, Callable
 
 from app.http import http_json
-from app.notify import build_card
+from app.notify import build_markdown
 from app.scheduler import CheckinOutcome
 
 logger = logging.getLogger(__name__)
@@ -72,8 +72,7 @@ class WeComAppNotifier:
             return False
         payload: dict[str, Any] = {
             'agentid': cfg.wecom_agent_id,
-            'msgtype': 'template_card',
-            **build_card(outcomes, today),
+            **build_markdown(outcomes, today),
         }
         if cfg.wecom_chat_id:
             payload['chatid'] = cfg.wecom_chat_id
