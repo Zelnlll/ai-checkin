@@ -26,6 +26,7 @@ class WeComAppNotifier:
     def __init__(self, cfg, get: Callable[..., Any] = http_json,
                  post: Callable[..., Any] = http_json):
         self._cfg = cfg
+        self._base = getattr(cfg, 'wecom_api_base', '') or API_BASE
         self._get = get
         self._post = post
         self._cache_file = cfg.data_dir / 'wecom_app_token.json'
@@ -40,7 +41,7 @@ class WeComAppNotifier:
                 pass
         if not (self._cfg.wecom_corp_id and self._cfg.wecom_corp_secret):
             return None
-        url = (f'{API_BASE}/gettoken?corpid={self._cfg.wecom_corp_id}'
+        url = (f'{self._base}/gettoken?corpid={self._cfg.wecom_corp_id}'
                f'&corpsecret={self._cfg.wecom_corp_secret}')
         try:
             resp = self._get('GET', url, {})
@@ -58,7 +59,7 @@ class WeComAppNotifier:
         return token
 
     def _send(self, token: str, payload: dict) -> dict:
-        url = f'{API_BASE}/message/send?access_token={token}'
+        url = f'{self._base}/message/send?access_token={token}'
         return self._post('POST', url, {}, body=payload)
 
     def push(self, outcomes: list[CheckinOutcome], today: str) -> bool:

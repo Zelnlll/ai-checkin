@@ -25,15 +25,15 @@ def outcomes():
 
 
 @pytest.fixture
-def cfg(tmp_path):
+def cfg(tmp_path, local_server):
     return Config((10, 5), 3, '', tmp_path,
                   wecom_corp_id='ww123', wecom_corp_secret='sec',
-                  wecom_agent_id=1000002, wecom_to_user='zhangsan')
+                  wecom_agent_id=1000002, wecom_to_user='zhangsan',
+                  wecom_api_base=local_server.base)
 
 
 @pytest.fixture
-def server(local_server, monkeypatch):
-    monkeypatch.setattr(na, 'API_BASE', local_server.base)
+def server(local_server):
     local_server.route('GET', '/gettoken',
                        body={"errcode": 0, "access_token": 'tok-1',
                              "expires_in": 7200})
@@ -83,7 +83,8 @@ def test_invalid_token_refreshed_and_retried_once(server, cfg, outcomes):
 def test_chatid_target_when_configured(server, tmp_path, outcomes):
     server.route('POST', '/message/send', body={"errcode": 0})
     cfg = Config((10, 5), 3, '', tmp_path, wecom_corp_id='ww', wecom_corp_secret='s',
-                 wecom_agent_id=1, wecom_chat_id='chat-9')
+                 wecom_agent_id=1, wecom_chat_id='chat-9',
+                 wecom_api_base=server.base)
     WeComAppNotifier(cfg).push(outcomes, '2026-09-22')
     body = sent_bodies(server)[0]
     assert body['chatid'] == 'chat-9' and 'touser' not in body
@@ -97,3 +98,15 @@ def test_missing_config_returns_false(cfg, outcomes):
 def test_gettoken_failure_returns_false(server, cfg, outcomes):
     server.route('GET', '/gettoken', body={"errcode": 40013, "errmsg": 'invalid corpid'})
     assert WeComAppNotifier(cfg).push(outcomes, '2026-09-22') is False
+
+
+def test_custom_api_base_from_config_is_used(local_server, tmp_path, outcomes, monkeypatch):
+    local_server.route('GET', '/cgi-bin/gettoken',
+                       body={"errcode": 0, "access_token": 'tok-x', "expires_in": 7200})
+    local_server.route('POST', '/cgi-bin/message/send', body={"errcode": 0})
+    cfg = Config((10, 5), 3, '', tmp_path, wecom_corp_id='ww', wecom_corp_secret='s',
+                 wecom_agent_id=1, wecom_to_user='u',
+                 wecom_api_base=local_server.base + '/cgi-bin')
+    assert WeComAppNotifier(cfg).push(outcomes, '2026-09-22') is True
+    assert any(x['path'].startswith('/cgi-bin/message/send')
+               for x in local_server.received)
