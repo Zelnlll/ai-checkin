@@ -2,6 +2,7 @@ services:
   ai-checkin:
     build: .
     container_name: ai-checkin
+    user: "1000:1000"   # 对齐 NAS bind mount 属主（基座镜像 appuser 是 1002）
     env_file: .env
     volumes:
       - ./data:/data
@@ -12,6 +13,7 @@ services:
   ai-checkin-web:
     build: .
     container_name: ai-checkin-web
+    user: "1000:1000"
     command: ["web", "--port", "8000"]
     env_file: .env
     volumes:
