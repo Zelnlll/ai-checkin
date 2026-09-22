@@ -12,7 +12,7 @@ from app.scheduler import CheckinOutcome
 
 logger = logging.getLogger(__name__)
 
-_STATE_ICON = {'ok': '✅', 'already': '✔', 'busy': '⏳', 'error': '❌'}
+_STATE_ICON = {'ok': '🟢', 'already': '🟢', 'busy': '🟢', 'error': '🔴'}
 
 
 def _title(o: CheckinOutcome) -> str:
