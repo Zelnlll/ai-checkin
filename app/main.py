@@ -101,6 +101,35 @@ def cmd_run_once(cfg: Config, *, platforms: list[str] | None = None,
     return outcomes
 
 
+class _NoopNotifier:
+    def push(self, outcomes, today):
+        return True
+
+
+def outcomes_signature(outcomes: list[CheckinOutcome]) -> str:
+    return ';'.join(sorted(f'{o.platform}:{o.result.state}' for o in outcomes))
+
+
+def _push_if_changed(cfg: Config, outcomes: list[CheckinOutcome]) -> bool:
+    """状态签名与上次已推送不同才发卡（首轮必发、全成功必发、重复状态静默）。"""
+    today = dt.date.today().isoformat()
+    sig = f'{today} ' + outcomes_signature(outcomes)   # 带日期：隔天同签名照发
+    f = cfg.data_dir / 'last_push_sig.txt'
+    try:
+        last = f.read_text(encoding='utf-8').strip() if f.exists() else None
+    except Exception:
+        last = None
+    if last == sig:
+        logger.info('状态无变化，跳过推送：%s', sig)
+        return False
+    choose_notifier(cfg).push(outcomes, today)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    tmp = f.with_suffix('.txt.tmp')
+    tmp.write_text(sig, encoding='utf-8')
+    tmp.replace(f)
+    return True
+
+
 def _marker_file(state: DailyState) -> Path:
     return state._file.parent / 'last_run.txt'
 
@@ -130,7 +159,8 @@ def cmd_daemon(cfg: Config) -> None:
         marker = _read_marker(state)
         if due_to_run(now, cfg, marker):
             try:
-                outcomes = cmd_run_once(cfg)
+                outcomes = cmd_run_once(cfg, notifier=_NoopNotifier())
+                _push_if_changed(cfg, outcomes)
             except Exception:
                 logger.exception('本轮签到异常')
                 outcomes = None

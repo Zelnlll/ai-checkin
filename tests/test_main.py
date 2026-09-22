@@ -135,3 +135,43 @@ def test_next_marker_exception_keeps_pending():
     from app.main import next_marker
     now = dt.datetime(2026, 9, 22, 10, 5)
     assert next_marker(now, '2026-09-22 2 10:05', None) == '2026-09-22 3 10:05'
+
+
+class _PushSpy:
+    def __init__(self):
+        self.pushed = []
+
+    def push(self, outcomes, today):
+        self.pushed.append(today)
+        return True
+
+
+def _patch_pusher(monkeypatch):
+    spy = _PushSpy()
+    monkeypatch.setattr('app.main.choose_notifier', lambda cfg: spy)
+    return spy
+
+
+def test_push_only_on_signature_change(tmp_path, monkeypatch):
+    from app.main import _push_if_changed
+    cfg = Config((10, 5), 3, '', tmp_path)
+    spy = _patch_pusher(monkeypatch)
+    ok = [CheckinOutcome('wps', CheckinResult('ok', 'x')),
+          CheckinOutcome('dazi', CheckinResult('error', 'y'))]
+    _push_if_changed(cfg, ok)                       # 首轮必发
+    _push_if_changed(cfg, ok)                       # 状态没变 → 不发
+    assert len(spy.pushed) == 1
+    better = [CheckinOutcome('wps', CheckinResult('ok', 'x')),
+              CheckinOutcome('dazi', CheckinResult('ok', 'y'))]
+    _push_if_changed(cfg, better)                   # dazi 变 ok → 发终态卡
+    assert len(spy.pushed) == 2
+    _push_if_changed(cfg, better)                   # 又没变 → 不发
+    assert len(spy.pushed) == 2
+
+
+def test_outcomes_signature_stable():
+    from app.main import outcomes_signature
+    a = [CheckinOutcome('wps', CheckinResult('ok', 'x')),
+         CheckinOutcome('dazi', CheckinResult('error', 'y'))]
+    b = list(reversed(a))
+    assert outcomes_signature(a) == outcomes_signature(b)
