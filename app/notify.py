@@ -12,7 +12,12 @@ from app.scheduler import CheckinOutcome
 
 logger = logging.getLogger(__name__)
 
-_STATE_ICON = {'ok': '🟢', 'already': '🟢', 'busy': '🟢', 'error': '🔴'}
+_PLATFORM_DOT = {'wps': '🟢', 'dazi': '🔵', 'minimax': '🟣',
+                 'qoder': '⚫', 'modelscope': '🟠'}
+
+
+def _dot(o: CheckinOutcome) -> str:
+    return '🔴' if o.result.state == 'error' else _PLATFORM_DOT.get(o.platform, '⚪')
 
 
 def _title(o: CheckinOutcome) -> str:
@@ -26,34 +31,32 @@ def build_text(outcomes: list[CheckinOutcome], today: str) -> dict[str, Any]:
     """纯文本兜底：微信插件保证可见，无任何标签。"""
     failed = [o for o in outcomes if o.result.state == 'error']
     done = sum(1 for o in outcomes if o.result.done())
-    head = (f'📋 每日签到 {today} · '
-            + (f'有失败 {done}/{len(outcomes)}' if failed else f'全部成功 {done}/{len(outcomes)}'))
+    head = (f'每日签到 {today} · '
+            + (f'有失败 {done}/{len(outcomes)}' if failed else f'签到成功 {done}/{len(outcomes)}'))
     lines = [head]
     for o in outcomes:
-        icon = _STATE_ICON.get(o.result.state, '❓')
         detail = o.result.reward or o.result.message
-        lines.append(f'{icon} {_title(o)} {detail}'[:60])
+        lines.append(f'{_dot(o)} {_title(o)} {detail}'[:60])
     return {'msgtype': 'text', 'text': {'content': chr(10).join(lines)}}
 
 
 def build_textcard(outcomes: list[CheckinOutcome], today: str) -> dict[str, Any]:
-    """textcard=微信插件支持的大标题+小字明细格式，奖励绿色高亮。"""
+    """textcard=微信插件支持的大标题+小字明细；每平台固定色圆点，失败变红。"""
     failed = [o for o in outcomes if o.result.state == 'error']
     done = sum(1 for o in outcomes if o.result.done())
     n = len(outcomes)
-    head = f'全部成功 {done}/{n}' if not failed else f'有失败 {done}/{n}'
+    head = f'签到成功 {done}/{n}' if not failed else f'有失败 {done}/{n}'
     lines = [today]
     for o in outcomes:
-        icon = _STATE_ICON.get(o.result.state, '❓')
         r = o.result
         detail = r.reward or (r.message if r.state == 'error' else '已签到')
-        lines.append(f'{icon} {_title(o)} {detail}'[:40])
+        lines.append(f'{_dot(o)} {_title(o)} {detail}'[:40])
     rows = lines[:]
     while len(chr(10).join(rows).encode('utf-8')) > 500 and len(rows) > 2:
         rows.pop()
     desc = chr(10).join(rows)
     return {'msgtype': 'textcard', 'textcard': {
-        'title': f'📋 {head}',
+        'title': head,
         'description': desc,
         'url': 'https://work.weixin.qq.com',
     }}

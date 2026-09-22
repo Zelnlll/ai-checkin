@@ -72,10 +72,10 @@ def test_textcard_big_title_and_small_rows(adapters_registered):
     ], '2026-09-22')
     assert msg['msgtype'] == 'textcard'
     tc = msg['textcard']
-    assert tc['title'] == '📋 全部成功 2/2'
+    assert tc['title'] == '签到成功 2/2'
     assert tc['url'].startswith('http')
     assert '2026-09-22' in tc['description']
-    assert '🟢 WPS 灵犀 +100 积分' in tc['description']
+    assert '🟢 WPS 灵犀 +100 积分' in tc['description']  # wps=绿
     assert '<' not in tc['description']   # 微信插件不解析 HTML，必须纯文本
 
 
@@ -86,7 +86,7 @@ def test_textcard_failure_title_red_mark(adapters_registered):
     ], '2026-09-22')
     tc = msg['textcard']
     assert '有失败 0/1' in tc['title']
-    assert '🔴 WPS 灵犀 Cookie 失效' in tc['description']
+    assert '🔴 WPS 灵犀 Cookie 失效' in tc['description']  # 失败覆盖为红
     assert '<' not in tc['description']
 
 
@@ -98,3 +98,16 @@ def test_textcard_description_under_512_bytes(adapters_registered):
         for p in ('wps', 'qoder', 'dazi', 'minimax', 'modelscope')
     ], '2026-09-22')
     assert len(msg['textcard']['description'].encode('utf-8')) <= 512
+
+
+def test_textcard_per_platform_dots(adapters_registered):
+    from app.notify import build_textcard
+    msg = build_textcard([
+        CheckinOutcome('dazi', CheckinResult('ok', '签到成功', '+500 积分')),
+        CheckinOutcome('minimax', CheckinResult('already', '已签到', '+400 积分')),
+        CheckinOutcome('qoder', CheckinResult('ok', '成功', '+100 Credits')),
+    ], '2026-09-22')
+    d = msg['textcard']['description']
+    assert '🔵 百度搭子' in d
+    assert '🟣 MiniMax Code' in d
+    assert '⚫ Qoder' in d
