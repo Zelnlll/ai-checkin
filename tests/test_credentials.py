@@ -61,3 +61,24 @@ def test_expiry_report_estimates_cookie_age(tmp_path):
 
     report = store.expiry_report('wps', store.load('wps'), BareAdapter())
     assert report['likely_expired_soon'] is True
+
+
+def test_reimport_same_platform_twice(tmp_path):
+    store = make_store(tmp_path)
+    (tmp_path / 'inbox' / 'wps.json').write_text('{"cookie": "first"}', encoding='utf-8')
+    assert store.import_inbox() == [('wps', 'wps.json')]
+    (tmp_path / 'inbox' / 'wps.json').write_text('{"cookie": "second"}', encoding='utf-8')
+    assert store.import_inbox() == [('wps', 'wps.json')]   # 旧 .imported 存在不许炸
+    assert store.load('wps')['cookie'] == 'second'
+
+
+def test_partial_import_merges_with_existing(tmp_path):
+    (tmp_path / 'inbox').mkdir()
+    store = CredentialStore(tmp_path, {'wps', 'minimax', 'modelscope'})
+    store.save('modelscope', {'cookie': 'm_session_id=a', 'token': 'ms-keep'})
+    (tmp_path / 'inbox' / 'modelscope.json').write_text(
+        '{"cookie": "m_session_id=b"}', encoding='utf-8')
+    store.import_inbox()
+    creds = store.load('modelscope')
+    assert creds['cookie'] == 'm_session_id=b'   # 新字段覆盖
+    assert creds['token'] == 'ms-keep'           # 已有字段保留

@@ -50,8 +50,10 @@ class CredentialStore:
                 continue
             if not isinstance(data, dict) or not (data.get('cookie') or data.get('token')):
                 continue
-            self.save(platform, data)
-            path.rename(path.with_suffix('.json.imported'))
+            existing = self.load(platform) or {}
+            merged = {**existing, **{k: v for k, v in data.items() if k != 'saved_at'}}
+            self.save(platform, merged)
+            path.replace(path.with_suffix('.json.imported'))  # 覆盖旧档，重复导入不炸
             imported.append((platform, path.name))
         return imported
 

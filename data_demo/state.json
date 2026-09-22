@@ -25,12 +25,20 @@
    "at": "18:36:39"
   },
   "modelscope": {
-   "state": "busy",
-   "message": "今日未发放，稍后再查",
-   "reward": "",
+   "state": "already",
+   "message": "今日魔粒已发放",
+   "reward": "+250 魔粒",
    "balance": "480",
    "streak": 0,
-   "at": "18:36:39"
+   "at": "19:23:30"
+  },
+  "qoder": {
+   "state": "already",
+   "message": "今日活动已领取",
+   "reward": "",
+   "balance": "",
+   "streak": 0,
+   "at": "19:21:15"
   }
  }
 }
