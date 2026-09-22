@@ -1,5 +1,7 @@
 # ②B 拍板：Playwright 内置主镜像（容器内 login 子命令后台控制浏览器）
-FROM mcr.microsoft.com/playwright/python:v1.49.0-noble
+# 国内直连 mcr.microsoft.com 被重置，走 DaoCloud 公共镜像（内容与官方一致）
+# 原镜像：mcr.microsoft.com/playwright/python:v1.49.0-noble
+FROM mcr.m.daocloud.io/playwright/python:v1.49.0-noble
 
 WORKDIR /app
 COPY app/ app/
