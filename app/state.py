@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import json
+import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +16,34 @@ from app.platforms.base import CheckinResult
 class DailyState:
     def __init__(self, data_dir: Path):
         self._file = Path(data_dir) / 'state.json'
+
+    @contextlib.contextmanager
+    def _locked(self):
+        """跨进程读改写锁（daemon/web 双容器共享卷）；10s 陈旧自动破锁。"""
+        lock = self._file.with_suffix('.lock')
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        deadline = time.time() + 5
+        while True:
+            try:
+                os.mkdir(lock)
+                break
+            except FileExistsError:
+                try:
+                    if time.time() - lock.stat().st_mtime > 10:
+                        os.rmdir(lock)
+                        continue
+                except OSError:
+                    pass
+                if time.time() > deadline:
+                    break          # 拿不到锁也要工作：宁可冒竞态不冒停摆
+                time.sleep(0.05)
+        try:
+            yield
+        finally:
+            try:
+                os.rmdir(lock)
+            except OSError:
+                pass
 
     def _load(self) -> dict[str, dict[str, dict[str, Any]]]:
         try:
@@ -33,16 +64,18 @@ class DailyState:
         return self._load().get(day, {}).get(platform)
 
     def mark(self, platform: str, result: CheckinResult, day: str) -> None:
-        data = self._load()
-        data.setdefault(day, {})[platform] = {
-            'state': result.state,
-            'message': result.message,
-            'reward': result.reward,
-            'balance': result.balance,
-            'streak': result.streak,
-            'at': dt.datetime.now().strftime('%H:%M:%S'),
-        }
-        self._save(data)
+        with self._locked():
+            data = self._load()
+            rec = data.setdefault(day, {}).setdefault(platform, {})
+            rec.update({
+                'state': result.state,
+                'message': result.message,
+                'reward': result.reward,
+                'balance': result.balance,
+                'streak': result.streak,
+                'at': dt.datetime.now().strftime('%H:%M:%S'),
+            })
+            self._save(data)
 
     def done_today(self, platform: str) -> bool:
         today = dt.date.today().isoformat()
@@ -50,10 +83,11 @@ class DailyState:
         return bool(rec) and rec.get('state') in ('ok', 'already')
 
     def touch_keepalive(self, platform: str, day: str) -> None:
-        data = self._load()
-        rec = data.setdefault(day, {}).setdefault(platform, {})
-        rec['keepalive'] = day
-        self._save(data)
+        with self._locked():
+            data = self._load()
+            rec = data.setdefault(day, {}).setdefault(platform, {})
+            rec['keepalive'] = day
+            self._save(data)
 
     def streak(self, platform: str, day: str) -> int:
         """连续签到天数：day 当天未签则从昨天往前数。"""

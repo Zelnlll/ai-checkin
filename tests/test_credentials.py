@@ -82,3 +82,28 @@ def test_partial_import_merges_with_existing(tmp_path):
     creds = store.load('modelscope')
     assert creds['cookie'] == 'm_session_id=b'   # 新字段覆盖
     assert creds['token'] == 'ms-keep'           # 已有字段保留
+
+
+def test_clear_removes_credential_and_inbox(tmp_path):
+    store = make_store(tmp_path)
+    store.save('wps', {'cookie': 'x'})
+    (tmp_path / 'inbox' / 'wps.json').write_text('{"cookie": "y"}', encoding='utf-8')
+    (tmp_path / 'inbox' / 'wps.json.imported').write_text('{}', encoding='utf-8')
+    result = store.clear('wps')
+    assert result['cleared'] is True
+    assert store.load('wps') is None
+    assert not (tmp_path / 'inbox' / 'wps.json').exists()
+    assert not (tmp_path / 'inbox' / 'wps.json.imported').exists()
+
+
+def test_saved_at_refreshes_only_on_change(tmp_path):
+    store = make_store(tmp_path)
+    store.save('wps', {'cookie': 'v1'})
+    (tmp_path / 'credentials' / 'wps.json').write_text(
+        json.dumps({'cookie': 'v1', 'saved_at': '2020-01-01T00:00:00'}), encoding='utf-8')
+    (tmp_path / 'inbox' / 'wps.json').write_text('{"cookie": "v1"}', encoding='utf-8')
+    store.import_inbox()
+    assert store.load('wps')['saved_at'] == '2020-01-01T00:00:00'   # 值没变不刷新
+    (tmp_path / 'inbox' / 'wps.json').write_text('{"cookie": "v2"}', encoding='utf-8')
+    store.import_inbox()
+    assert store.load('wps')['saved_at'] != '2020-01-01T00:00:00'   # 变了刷新，临期提醒可消除

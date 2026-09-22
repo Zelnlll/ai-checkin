@@ -27,13 +27,24 @@ class CredentialStore:
         except Exception:
             return None
 
-    def save(self, platform: str, creds: dict[str, Any]) -> None:
+    def save(self, platform: str, creds: dict[str, Any],
+             saved_at: str | None = None) -> None:
         self._cred_dir.mkdir(parents=True, exist_ok=True)
         creds = dict(creds)
-        creds.setdefault('saved_at', dt.datetime.now().isoformat(timespec='seconds'))
+        creds['saved_at'] = saved_at or dt.datetime.now().isoformat(timespec='seconds')
         tmp = self._file(platform).with_suffix('.json.tmp')
         tmp.write_text(json.dumps(creds, ensure_ascii=False, indent=1), encoding='utf-8')
         tmp.replace(self._file(platform))
+
+    def clear(self, platform: str) -> dict[str, Any]:
+        for p in (self._file(platform),
+                  self._inbox / f'{platform}.json',
+                  self._inbox / f'{platform}.json.imported'):
+            try:
+                p.unlink()
+            except OSError:
+                pass
+        return {'cleared': True, 'message': f'{platform} 凭证已清空'}
 
     def import_inbox(self) -> list[tuple[str, str]]:
         """扫描 inbox/<platform>.json，合法则导入并把源文件改名为 .imported。"""
@@ -52,7 +63,10 @@ class CredentialStore:
                 continue
             existing = self.load(platform) or {}
             merged = {**existing, **{k: v for k, v in data.items() if k != 'saved_at'}}
-            self.save(platform, merged)
+            changed = any(existing.get(k) != merged.get(k)
+                          for k in ('cookie', 'token', 'csrf'))
+            self.save(platform, merged,
+                      saved_at=existing.get('saved_at') if existing and not changed else None)
             path.replace(path.with_suffix('.json.imported'))  # 覆盖旧档，重复导入不炸
             imported.append((platform, path.name))
         return imported

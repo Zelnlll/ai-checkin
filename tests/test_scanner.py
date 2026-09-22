@@ -46,3 +46,15 @@ def test_scan_result_is_importable(tmp_path):
     store = CredentialStore(tmp_path / 'data', {'wps', 'qoder', 'modelscope'})
     imported = dict(store.import_inbox())
     assert sorted(imported) == ['modelscope', 'qoder', 'wps']
+
+
+def test_scan_maps_dumate_key_to_dazi(tmp_path):
+    home = tmp_path / 'home'
+    wbs = home / '.wb-switch'
+    wbs.mkdir(parents=True)
+    (wbs / 'agent_accounts.json').write_text(json.dumps(
+        [{'platform': 'dumate', 'token': 'bce-user-info=x', 'needs_relogin': False}]),
+        encoding='utf-8')
+    inbox = tmp_path / 'inbox'
+    assert scan_local_accounts(inbox, home=home) == ['dazi']
+    assert json.loads((inbox / 'dazi.json').read_text(encoding='utf-8'))['cookie'] == 'bce-user-info=x'

@@ -10,6 +10,8 @@ import json
 from pathlib import Path
 
 _COOKIE_PLATFORMS = {'wps', 'dazi'}
+# wb-switch 存储键 → 本项目平台键（agent_ext.rs 里搭子的 key 是 dumate）
+_KEY_ALIASES = {'dumate': 'dazi'}
 _SUPPORTED = {'wps', 'dazi', 'minimax', 'qoder'}
 
 
@@ -25,6 +27,7 @@ def scan_local_accounts(inbox: Path, home: Path | None = None) -> list[str]:
             accounts = []
         for acc in accounts if isinstance(accounts, list) else []:
             platform = acc.get('platform') if isinstance(acc, dict) else None
+            platform = _KEY_ALIASES.get(platform, platform)
             token = str(acc.get('token') or '') if isinstance(acc, dict) else ''
             if platform not in _SUPPORTED or not token or acc.get('needs_relogin'):
                 continue

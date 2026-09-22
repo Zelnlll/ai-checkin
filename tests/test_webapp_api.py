@@ -132,3 +132,63 @@ def test_settings_per_field_inputs():
     assert 'cred-qoder-cookie' not in html
     assert 'cred-wps-cookie' in html             # 灵犀只有 Cookie 框
     assert 'cred-wps-token' not in html
+
+
+def test_dashboard_survives_minimax_jwt_credential(tmp_path):
+    """C1 回归：minimax 存 JWT 后面板整页不许炸。"""
+    from tests.conftest import make_jwt
+    import time
+    cfg = Config((10, 5), 3, '', tmp_path)
+    store = CredentialStore(tmp_path, {'minimax'})
+    store.save('minimax', {'token': make_jwt({'exp': int(time.time()) + 864000})})
+    httpd, base = _start_server(cfg)
+    try:
+        import urllib.request
+        with urllib.request.urlopen(base + '/', timeout=10) as r:
+            assert r.status == 200 and 'MiniMax' in r.read().decode('utf-8')
+    finally:
+        httpd.shutdown(); httpd.server_close()
+
+
+def test_api_login_passes_headful_kwarg(tmp_path, monkeypatch):
+    """C2 回归：/api/login 参数名必须与 browser_login 签名一致。"""
+    import app.browser_login as bl
+    seen = {}
+
+    def fake(cfg, platform, headful=False):
+        seen['headful'] = headful
+        seen['platform'] = platform
+        return 0
+    monkeypatch.setattr(bl, 'browser_login', fake)
+    import app.webapp as webapp
+    monkeypatch.setattr(webapp, 'browser_login', fake, raising=False)
+    cfg = Config((10, 5), 3, '', tmp_path)
+    httpd, base = _start_server(cfg)
+    try:
+        resp = _post(f'{base}/api/login/wps', {})
+        assert resp['ok'] is True
+        assert seen == {'headful': False, 'platform': 'wps'}
+    finally:
+        httpd.shutdown(); httpd.server_close()
+
+
+def test_handler_exception_returns_json_500(tmp_path, monkeypatch):
+    """I1 回归：后端炸了要返回结构化错误，不能掐连接。"""
+    import app.webapp as webapp
+
+    def boom(*a, **k):
+        raise RuntimeError('磁盘炸了')
+    monkeypatch.setattr(webapp, 'collect_status', boom)
+    cfg = Config((10, 5), 3, '', tmp_path)
+    httpd, base = _start_server(cfg)
+    try:
+        import urllib.request
+        try:
+            urllib.request.urlopen(base + '/', timeout=10)
+            raised = None
+        except urllib.error.HTTPError as e:
+            raised = e
+        assert raised is not None and raised.code == 500
+        assert b'ok' in raised.read()
+    finally:
+        httpd.shutdown(); httpd.server_close()

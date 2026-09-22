@@ -68,7 +68,8 @@ def run_all(platforms: list[str], *, store: Any, state: Any, config: Any,
             continue
         result = run_platform(adapter, creds, config)
         if result.done():
+            state.mark(platform, result, today)   # 先落盘，streak 才含今天
             result = _enrich(adapter, creds, result, state, platform, today)
-            state.mark(platform, result, today)   # 失败不落 done，留给重试
+            state.mark(platform, result, today)   # 再落 enriched 值
         outcomes.append(CheckinOutcome(platform, result))
     return outcomes

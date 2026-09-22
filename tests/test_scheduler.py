@@ -61,7 +61,7 @@ def test_pending_platform_runs_and_marks_state(stub_registered):
                        today='2026-09-22', now_minutes=10 * 60 + 6,
                        run_platform=lambda adapter, creds, cfg: CheckinResult('ok', '签到成功 +500', '+500'))
     assert outcomes[0].result.state == 'ok'
-    assert state.marked == [('stub', 'ok')]
+    assert [m[1] for m in state.marked] == ['ok', 'ok']   # I5：mark→enrich→再 mark
 
 
 def test_failed_platform_is_not_marked_done(stub_registered):
@@ -169,3 +169,19 @@ def test_run_keepalive_pings_credentialed_platforms(cred_registered):
     result = run_keepalive(FakeStore({'cred': {'token': 't1'}}), state,
                            ['cred', 'wps'], today='2026-09-22')
     assert result == {'cred': True} and calls == ['t1']   # wps 无凭证跳过
+
+
+def test_streak_includes_today_on_first_checkin(cred_registered, tmp_path):
+    """I5 回归：真实 DailyState 下，连续第 N 天签到应显示 N（含今天）。"""
+    import datetime as dt
+    from app.credentials import CredentialStore
+    from app.state import DailyState
+    state = DailyState(tmp_path)
+    store = CredentialStore(tmp_path, {'cred'})
+    store.save('cred', {'token': 't'})
+    today = dt.date.today()
+    state.mark('cred', CheckinResult('ok', 'x'), (today - dt.timedelta(days=1)).isoformat())
+    outcomes = run_all(['cred'], store=store, state=state, config=FakeConfig(),
+                       today=today.isoformat(), now_minutes=10 * 60 + 6,
+                       run_platform=lambda a, c, cfg: CheckinResult('ok', '成功', '+1'))
+    assert outcomes[0].result.streak == 2      # 昨天+今天=2

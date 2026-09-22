@@ -138,3 +138,11 @@ def test_credits_sums_valid_packages(mm, local_server):
                             "expire_time": "2000-01-01T00:00:00+08:00"},
                        ]}})
     assert mm.credits({'token': 'jwt'}) == '80'
+
+
+def test_token_status_works_with_jwt():
+    from tests.conftest import make_jwt
+    import time
+    tok = make_jwt({'exp': int(time.time()) + 864000})
+    st = MinimaxAdapter().token_status({'token': tok})
+    assert st['known'] is True and st['expired'] is False

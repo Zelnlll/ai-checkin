@@ -10,12 +10,18 @@
 - **重试**：失败/服务器拥挤按 `RETRY_TIMES` 指数退避重试（10s/20s/40s）；
   凭证失效（auth 类）不重试，直接告警。
 - **请求日志**：每次尝试追加 `data/logs/requests.log`（JSON 行）。
-- **通知**：企微 markdown 彩色汇总消息：标题+日期、完成数（绿=全成/红=有失败）、
-  "战利品"引用行（聚合各平台奖励）、每平台一行 ✅成功/✔已签/⏳待重试/❌失败+奖励/原因。
-  （曾用 template_card 模板卡，因官方 vertical_content_list 上限 3 条弃用。）
+- **通知**：企微 **textcard**（大标题"签到成功 n/n"+每平台一行色圆点明细，
+  奖励/余X/连N天，失败红色+原因）。微信插件兼容铁律：markdown 与 template_card
+  在微信端显示"暂不支持"，均已弃用；textcard 被拒时兜底纯文本。
   双通道：**群机器人 Webhook**（`WECOM_WEBHOOK`）或**自建应用**
-  （`WECOM_CORP_ID/SECRET/AGENT_ID` + `WECOM_TO_USER`/`WECOM_CHAT_ID`，
-  access_token 自动缓存与失效刷新；应用通道配置齐全时优先）。
+  （`WECOM_CORP_ID/SECRET/AGENT_ID` + `WECOM_TO_USER`/`WECOM_CHAT_ID`，可配
+  `WECOM_API_BASE` 反代解决动态 IP/可信 IP，access_token 自动缓存与失效刷新；
+  应用通道配置齐全时优先）。
+- **网页面板**：`web` 子命令，仪表盘（进度条+每平台卡片+一键签到）与
+  `/settings`（分字段凭证粘贴导入、网页登录、扫描本机账号、清空凭证）。
+- **保活**：每轮签到后对各平台发轻量已认证请求续会话，面板显示保活日期。
+- **补跑**：当天有 busy/error 平台时 daemon 每 30 分钟补跑一轮（最多 6 轮），
+  全部完成即止。
 - **凭证过期检测**：JWT 类（Qoder/MiniMax）按 exp 精确判定；Cookie 类按导入时间估算 30 天临期提醒。
 
 ## 快速开始（飞牛 NAS / 任意 Docker 主机）
@@ -24,7 +30,8 @@
 git clone <本仓库> ai-checkin && cd ai-checkin
 cp .env.example .env        # 填 WECOM_WEBHOOK 等
 docker compose up -d --build
-docker compose exec ai-checkin status   # 查看五平台凭证与今日状态
+docker compose exec ai-checkin python -m app.main status   # 五平台凭证与今日状态
+# 浏览器打开 http://NAS_IP:8000 查看网页面板（web 容器）
 ```
 
 ## 凭证获取（两条路径）
@@ -39,7 +46,8 @@ docker compose exec ai-checkin status   # 查看五平台凭证与今日状态
 
 **inbox 信箱机制**：任何来源的凭证写成 `data/inbox/<platform>.json`
 （内容 `{"cookie": "..."}` 或 `{"token": "..."}`，魔搭两者都要），
-容器启动与每轮任务前自动导入并改名为 `.imported`。
+每轮任务前自动导入（**增量合并**：只更新贴过的字段，其余保留）并改名为 `.imported`。
+`scan` 子命令/面板按钮可自动扫描本机 `~/.wb-switch/` 已捕获凭证。
 PC 端跑 `login --headful` 后可把 `inbox/` 拷到 NAS 共享目录挂载的 `data/inbox/`。
 
 ## 环境变量（.env）
@@ -56,16 +64,22 @@ data/
 ├── credentials/    # 已导入凭证（明文 JSON，目录权限保持 700）
 ├── browser/        # Playwright storage_state + 登录卡点截图
 ├── logs/           # requests.log 请求日志
-├── state.json      # 每日签到状态（幂等依据）
-└── last_run.txt    # 守护模式当日已跑标记
+├── state.json      # 每日签到状态（幂等依据，跨进程文件锁）
+└── last_run.txt    # 守护模式标记：'日期 done' 或 '日期 <轮次> <HH:MM>'
 ```
 
 ## 开发 / 测试
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest            # 98 项，全离线（本地回环假服务器 + 真实报文黄金样本）
+python -m pytest            # 159 项，全离线（本地回环假服务器 + 真实报文黄金样本）
 ```
+
+## 部署注意
+
+- **网页面板无鉴权**且可写（触发签到/改凭证），**只可暴露内网**，勿做端口映射到公网。
+- bind mount 的 `./data` 属主需与容器用户一致：NAS 上先 `sudo chown -R 1000:1000 data`。
+- 容器内 Chromium 以 `--no-sandbox` 启动（镜像无 user-namespace，内网可接受）。
 
 ## 已知限制
 

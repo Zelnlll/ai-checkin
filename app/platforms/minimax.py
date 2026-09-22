@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
 import json
 import time
@@ -129,7 +130,6 @@ class MinimaxAdapter(Adapter):
             raise
 
     def credits(self, creds: dict[str, Any]) -> str | None:
-        import datetime as dt
         token = str(creds.get('token') or '').strip()
         data = _unwrap(_request(
             '/minimax-cloud/api/v1/credit/details?timezone_id=Asia/Shanghai',

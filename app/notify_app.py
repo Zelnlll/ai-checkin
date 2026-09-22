@@ -55,8 +55,10 @@ class WeComAppNotifier:
         token = str(resp['access_token'])
         expires_at = time.time() + int(resp.get('expires_in') or 7200) - 300
         self._cache_file.parent.mkdir(parents=True, exist_ok=True)
-        self._cache_file.write_text(json.dumps(
+        tmp = self._cache_file.with_suffix('.json.tmp')
+        tmp.write_text(json.dumps(
             {'access_token': token, 'expires_at': expires_at}), encoding='utf-8')
+        tmp.replace(self._cache_file)
         return token
 
     def _target_fields(self) -> dict[str, Any]:

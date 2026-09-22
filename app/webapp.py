@@ -171,6 +171,14 @@ async function scanLocal(){
   alert(j.ok && j.platforms.length ? ('已导入：'+j.platforms.join('、')) : (j.message || '未发现可导入账号'));
   location.reload();
 }
+async function clearCred(p){
+  if (!confirm('清空该平台凭证？')) return;
+  const r = await fetch('/api/credentials/'+p,{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({clear:true})});
+  const j = await r.json();
+  alert(j.ok ? '已清空' : ('失败：'+j.message));
+  location.reload();
+}
 async function webLogin(p){
   alert('已发起网页登录，请稍候（最长5分钟）…');
   const r = await fetch('/api/login/'+p,{method:'POST'});
@@ -222,7 +230,9 @@ def render_settings(status: dict[str, Any]) -> str:
             + inputs +
             f'<button class="btn blue" style="margin-top:8px;width:auto;padding:8px 16px" '
             f'''onclick="saveCred('{p['platform']}')"''' '>保存并导入</button>'
-            + login_btn + '</div>')
+            + login_btn +
+            f'<button class="btn gray" style="margin-top:8px;width:auto;padding:8px 16px" '
+            f'''onclick="clearCred('{p['platform']}')"''' '>清空凭证</button></div>')
     cards = '\n'.join(blocks)
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -261,6 +271,12 @@ class _Handler(BaseHTTPRequestHandler):
         return cfg, store, state, collect_status(cfg, store, state, list(ADAPTERS))
 
     def do_GET(self):
+        try:
+            self._get()
+        except Exception as exc:
+            self._json({'ok': False, 'message': f'{type(exc).__name__}: {exc}'}, 500)
+
+    def _get(self):
         *_, status = self._status()
         if self.path.startswith('/api/status'):
             self._json(status)
@@ -270,8 +286,14 @@ class _Handler(BaseHTTPRequestHandler):
             self._html(render_html(status))
 
     def do_POST(self):
+        try:
+            self._post()
+        except Exception as exc:
+            self._json({'ok': False, 'message': f'{type(exc).__name__}: {exc}'}, 500)
+
+    def _post(self):
         cfg, store, state, _ = self._status()
-        length = int(self.headers.get('Content-Length') or 0)
+        length = min(int(self.headers.get('Content-Length') or 0), 1024 * 1024)
         try:
             payload = json.loads(self.rfile.read(length) or b'{}')
         except Exception:
@@ -287,6 +309,9 @@ class _Handler(BaseHTTPRequestHandler):
             self._json({'ok': False, 'message': f'未知平台 {platform}'}, 404)
             return
         if head.endswith('/api/credentials'):
+            if payload.get('clear'):
+                self._json({'ok': True, **store.clear(platform)})
+                return
             if not (payload.get('cookie') or payload.get('token')):
                 self._json({'ok': False, 'message': '需提供 cookie 或 token 字段'})
                 return
@@ -303,13 +328,9 @@ class _Handler(BaseHTTPRequestHandler):
             r = outcomes[0].result
             self._json({'ok': r.state in ('ok', 'already'),
                         'state': r.state, 'message': r.message})
-        elif head.endswith('/api/scan'):
-            found = scan_local_accounts(cfg.data_dir / 'inbox')
-            store.import_inbox()
-            self._json({'ok': True, 'platforms': found, 'message': '、'.join(found) or '未发现可导入账号'})
         elif head.endswith('/api/login'):
             from app.browser_login import browser_login
-            code = browser_login(cfg, platform, headless=True)
+            code = browser_login(cfg, platform, headful=False)
             self._json({'ok': code == 0,
                         'message': '成功' if code == 0 else f'退出码 {code}（可能需有头扫码）'})
         else:

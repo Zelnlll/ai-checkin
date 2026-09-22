@@ -7,6 +7,7 @@ from app.credentials import CredentialStore
 from app.main import cmd_run_once, due_to_run
 from app.platforms import ADAPTERS
 from app.platforms.base import Adapter, CheckinResult
+from app.scheduler import CheckinOutcome
 from app.state import DailyState
 
 
@@ -99,3 +100,38 @@ def test_run_once_selects_app_notifier_when_corpid_configured(cfg, stub_register
                      wecom_to_user='u')
     assert isinstance(choose_notifier(app_cfg), WeComAppNotifier)
     assert isinstance(choose_notifier(cfg), WeComNotifier)   # 无 corpid → 群机器人
+
+
+def test_due_to_run_retries_pending_rounds():
+    cfg10 = Config((10, 5), 3, '', None)
+    now = dt.datetime(2026, 9, 22, 11, 0)
+    # 首轮 10:05 跑过仍有 pending，超 30 分钟 → 补跑
+    assert due_to_run(now, cfg10, '2026-09-22 1 10:05') is True
+    # 距上次不足 30 分钟 → 等待
+    assert due_to_run(dt.datetime(2026, 9, 22, 10, 20), cfg10,
+                      '2026-09-22 1 10:05') is False
+    # 全部完成 → 当天不再跑
+    assert due_to_run(now, cfg10, '2026-09-22 done') is False
+    # 轮次用完 → 不再跑
+    assert due_to_run(now, cfg10, '2026-09-22 6 10:05') is False
+    # 旧格式（纯日期）向后兼容视为 done
+    assert due_to_run(now, cfg10, '2026-09-22') is False
+    # 昨天的记录 → 今天到点照跑
+    assert due_to_run(now, cfg10, '2026-09-21 done') is True
+
+
+def test_next_marker_counts_rounds_and_done():
+    from app.main import next_marker
+    now = dt.datetime(2026, 9, 22, 10, 5)
+    outcomes = [CheckinOutcome('wps', CheckinResult('ok', 'x')),
+                CheckinOutcome('dazi', CheckinResult('busy', 'y'))]
+    assert next_marker(now, '2026-09-22 1 10:05', outcomes) == '2026-09-22 2 10:05'
+    outcomes_done = [CheckinOutcome('wps', CheckinResult('ok', 'x'))]
+    assert next_marker(now, '2026-09-22 1 10:05', outcomes_done) == '2026-09-22 done'
+    assert next_marker(now, None, None) == '2026-09-22 1 10:05'   # 首轮异常也计轮次
+
+
+def test_next_marker_exception_keeps_pending():
+    from app.main import next_marker
+    now = dt.datetime(2026, 9, 22, 10, 5)
+    assert next_marker(now, '2026-09-22 2 10:05', None) == '2026-09-22 3 10:05'

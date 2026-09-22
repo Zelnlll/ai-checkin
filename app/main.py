@@ -7,6 +7,7 @@ import datetime as dt
 import json
 import logging
 import time
+from pathlib import Path
 from typing import Callable
 
 from app.config import Config, load_config
@@ -21,10 +22,42 @@ logger = logging.getLogger('ai-checkin')
 TICK_SECONDS = 20
 
 
-def due_to_run(now: dt.datetime, cfg: Config, last_run_date: str | None) -> bool:
-    if last_run_date == now.date().isoformat():
+MAX_ROUNDS = 6
+RETRY_GAP_MINUTES = 30
+
+
+def due_to_run(now: dt.datetime, cfg: Config, marker: str | None) -> bool:
+    """marker：'YYYY-MM-DD'（旧格式=done）| '... done' | '... <轮次> <HH:MM>'。"""
+    if not should_fire(now.hour * 60 + now.minute, cfg.checkin_time):
         return False
-    return should_fire(now.hour * 60 + now.minute, cfg.checkin_time)
+    if not marker:
+        return True
+    parts = marker.split()
+    if parts[0] != now.date().isoformat():
+        return True
+    if len(parts) == 1 or parts[1] == 'done':
+        return False
+    if not parts[1].isdigit() or int(parts[1]) >= MAX_ROUNDS:
+        return False
+    try:
+        hh, mm = map(int, parts[2].split(':'))
+        last = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+    except (IndexError, ValueError):
+        return False
+    return now >= last + dt.timedelta(minutes=RETRY_GAP_MINUTES)
+
+
+def next_marker(now: dt.datetime, marker: str | None,
+                outcomes: list | None) -> str:
+    today = now.date().isoformat()
+    rounds = 0
+    if marker:
+        parts = marker.split()
+        if parts[0] == today and len(parts) > 1 and parts[1].isdigit():
+            rounds = int(parts[1])
+    if outcomes is not None and all(o.result.done() for o in outcomes):
+        return f'{today} done'
+    return f'{today} {rounds + 1} ' + now.strftime('%H:%M')
 
 
 def _default_runner(cfg: Config):
@@ -68,18 +101,24 @@ def cmd_run_once(cfg: Config, *, platforms: list[str] | None = None,
     return outcomes
 
 
-def _last_run_date(state: DailyState) -> str | None:
+def _marker_file(state: DailyState) -> Path:
+    return state._file.parent / 'last_run.txt'
+
+
+def _read_marker(state: DailyState) -> str | None:
     try:
-        marker = state._file.parent / 'last_run.txt'
-        return marker.read_text(encoding='utf-8').strip() if marker.exists() else None
+        f = _marker_file(state)
+        return f.read_text(encoding='utf-8').strip() if f.exists() else None
     except Exception:
         return None
 
 
-def _mark_run(state: DailyState) -> None:
-    marker = state._file.parent / 'last_run.txt'
-    marker.parent.mkdir(parents=True, exist_ok=True)
-    marker.write_text(dt.date.today().isoformat(), encoding='utf-8')
+def _write_marker(state: DailyState, content: str) -> None:
+    f = _marker_file(state)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    tmp = f.with_suffix('.txt.tmp')
+    tmp.write_text(content, encoding='utf-8')
+    tmp.replace(f)
 
 
 def cmd_daemon(cfg: Config) -> None:
@@ -88,12 +127,14 @@ def cmd_daemon(cfg: Config) -> None:
     state = DailyState(cfg.data_dir)
     while True:
         now = dt.datetime.now()
-        if due_to_run(now, cfg, _last_run_date(state)):
-            _mark_run(state)
+        marker = _read_marker(state)
+        if due_to_run(now, cfg, marker):
             try:
-                cmd_run_once(cfg)
+                outcomes = cmd_run_once(cfg)
             except Exception:
                 logger.exception('本轮签到异常')
+                outcomes = None
+            _write_marker(state, next_marker(now, marker, outcomes))
             try:
                 from app.scheduler import run_keepalive
                 store = CredentialStore(cfg.data_dir, set(ADAPTERS))

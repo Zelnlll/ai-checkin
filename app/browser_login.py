@@ -53,7 +53,7 @@ def browser_login(cfg, platform: str, headful: bool = False) -> int:
     timeout_s = int(__import__('os').environ.get('LOGIN_TIMEOUT', '300'))
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=not headful)
+        browser = p.chromium.launch(headless=not headful, args=['--no-sandbox'])
         ctx_kwargs = {'storage_state': str(state_file)} if state_file.exists() else {}
         context = browser.new_context(**ctx_kwargs)
         page = context.new_page()
