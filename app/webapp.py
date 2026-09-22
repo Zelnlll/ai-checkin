@@ -30,6 +30,15 @@ _PILL = {
     '': ('今日未执行', '#f3f4f6', '#6b7280'),
 }
 _BROWSER_LOGIN = {'wps', 'dazi', 'minimax', 'modelscope'}
+# 平台 → 需要的凭证字段与提示（魔搭双入口：只填令牌也能与已存 Cookie 增量合并）
+_CRED_FIELDS = {
+    'wps': [('cookie', 'Cookie 整串（含 wps_sid）')],
+    'dazi': [('cookie', 'Cookie 整串（含 bce-user-info）')],
+    'minimax': [('token', 'token（JWT，抓包或 localStorage）')],
+    'qoder': [('token', 'Bearer 后的 dt- 设备令牌（抓包 openapi.qoder.com.cn）')],
+    'modelscope': [('cookie', '会话 Cookie 整串（含 m_session_id）'),
+                   ('token', 'SDK 令牌（ms- 开头，个人中心）')],
+}
 
 
 def _last_done(state: DailyState, platform: str, today: str) -> str:
@@ -146,9 +155,11 @@ async function doCheckin(p){
   location.reload();
 }
 async function saveCred(p){
-  const raw = document.getElementById('cred-'+p).value.trim();
-  let body;
-  try { body = JSON.parse(raw); } catch(e) { body = {cookie: raw}; }
+  const body = {};
+  document.querySelectorAll('[data-p="'+p+'"]').forEach(el => {
+    if (el.value.trim()) body[el.dataset.field] = el.value.trim();
+  });
+  if (!body.cookie && !body.token) { alert('请先粘贴内容'); return; }
   const r = await fetch('/api/credentials/'+p,{method:'POST',
     headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const j = await r.json();
@@ -192,6 +203,14 @@ def render_html(status: dict[str, Any]) -> str:
 def render_settings(status: dict[str, Any]) -> str:
     blocks = []
     for p in status['platforms']:
+        fields = _CRED_FIELDS.get(p['platform'], [('cookie', 'Cookie 整串')])
+        inputs = '\n'.join(
+            f'<div class="slogan" style="margin:8px 0 4px">{label}</div>'
+            f'<textarea id="cred-{p["platform"]}-{name}" data-p="{p["platform"]}" '
+            f'data-field="{name}" rows="3" style="width:100%;'
+            f'box-sizing:border-box;border:1px solid #d1d5db;border-radius:8px;'
+            f'padding:8px;font-size:12px"></textarea>'
+            for name, label in fields)
         login_btn = (
             f'<button class="btn blue" style="margin-top:8px;width:auto;padding:8px 16px"'
             f''' onclick="webLogin('{p['platform']}')"''' '>网页登录获取</button>'
@@ -200,11 +219,7 @@ def render_settings(status: dict[str, Any]) -> str:
             f'<div class="card"><div class="row"><span class="name">{p["title"]}</span>'
             f'<span class="pill" style="background:#f3f4f6;color:#6b7280">'
             f'{p["credential"]}</span></div>'
-            f'<div class="slogan" style="margin:8px 0">粘贴 Cookie 整串，或 JSON：'
-            '{{"cookie":"..."}} / {{"token":"..."}}</div>'
-            f'<textarea id="cred-{p["platform"]}" rows="4" style="width:100%;'
-            f'box-sizing:border-box;border:1px solid #d1d5db;border-radius:8px;'
-            f'padding:8px;font-size:12px"></textarea>'
+            + inputs +
             f'<button class="btn blue" style="margin-top:8px;width:auto;padding:8px 16px" '
             f'''onclick="saveCred('{p['platform']}')"''' '>保存并导入</button>'
             + login_btn + '</div>')

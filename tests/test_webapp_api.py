@@ -115,3 +115,20 @@ def test_dashboard_shows_keepalive_row(tmp_path):
     state.touch_keepalive('wps', date.today().isoformat())
     html = render_html(collect_status(cfg, store, state, ['wps']))
     assert '保活' in html
+
+
+def test_settings_per_field_inputs():
+    from app.webapp import render_settings
+    status = {'today': '', 'platforms': [
+        {'platform': 'modelscope', 'title': '魔搭', 'credential': '已导入'},
+        {'platform': 'qoder', 'title': 'Qoder', 'credential': '未导入凭证'},
+        {'platform': 'wps', 'title': 'WPS 灵犀', 'credential': '未导入凭证'},
+    ]}
+    html = render_settings(status)
+    assert 'cred-modelscope-cookie' in html      # 魔搭两个独立输入口
+    assert 'cred-modelscope-token' in html
+    assert 'SDK 令牌' in html
+    assert 'cred-qoder-token' in html            # Qoder 只有令牌框
+    assert 'cred-qoder-cookie' not in html
+    assert 'cred-wps-cookie' in html             # 灵犀只有 Cookie 框
+    assert 'cred-wps-token' not in html
