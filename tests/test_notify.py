@@ -26,10 +26,15 @@ class _Qoder(Adapter):
 
 @pytest.fixture
 def adapters_registered():
+    saved = {k: ADAPTERS.get(k) for k in ('wps', 'qoder')}
     ADAPTERS['wps'] = _Wps()
     ADAPTERS['qoder'] = _Qoder()
     yield
-    del ADAPTERS['wps'], ADAPTERS['qoder']
+    for k, v in saved.items():
+        if v is not None:
+            ADAPTERS[k] = v
+        else:
+            ADAPTERS.pop(k, None)
 
 
 def test_all_success_structure(adapters_registered):

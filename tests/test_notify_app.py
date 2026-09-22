@@ -19,9 +19,13 @@ class _Wps(Adapter):
 
 @pytest.fixture
 def outcomes():
+    saved = ADAPTERS.get('wps')
     ADAPTERS['wps'] = _Wps()
     yield [CheckinOutcome('wps', CheckinResult('ok', '签到成功', '+100 积分'))]
-    del ADAPTERS['wps']
+    if saved is not None:
+        ADAPTERS['wps'] = saved
+    else:
+        del ADAPTERS['wps']
 
 
 @pytest.fixture
@@ -110,3 +114,56 @@ def test_custom_api_base_from_config_is_used(local_server, tmp_path, outcomes, m
     assert WeComAppNotifier(cfg).push(outcomes, '2026-09-22') is True
     assert any(x['path'].startswith('/cgi-bin/message/send')
                for x in local_server.received)
+
+
+class _ImgCtx:
+    """记录调用顺序的假 render/upload/post。"""
+
+    def __init__(self, render_fail=False, upload_fail=False):
+        self.calls = []
+        self.render_fail = render_fail
+        self.upload_fail = upload_fail
+
+    def render(self, html):
+        self.calls.append('render')
+        if self.render_fail:
+            raise RuntimeError('no browser')
+        assert '签到中心' in html
+        return b'PNGBYTES'
+
+    def upload(self, base, token, png):
+        self.calls.append('upload')
+        if self.upload_fail:
+            raise RuntimeError('upload 500')
+        assert png == b'PNGBYTES'
+        return 'MEDIA-ID-1'
+
+    def post(self, method, url, headers, body=None, **kw):
+        self.calls.append(('send', body))
+        return {'errcode': 0}
+
+
+def test_image_message_sent_when_render_ok(server, cfg, outcomes):
+    ctx = _ImgCtx()
+    n = WeComAppNotifier(cfg, post=ctx.post, render=ctx.render, upload=ctx.upload)
+    assert n.push(outcomes, '2026-09-22') is True
+    assert ctx.calls[:2] == ['render', 'upload']
+    body = ctx.calls[2][1]
+    assert body['msgtype'] == 'image' and body['image']['media_id'] == 'MEDIA-ID-1'
+    assert body['touser'] == 'zhangsan'
+
+
+def test_render_failure_falls_back_to_markdown(server, cfg, outcomes):
+    ctx = _ImgCtx(render_fail=True)
+    n = WeComAppNotifier(cfg, post=ctx.post, render=ctx.render, upload=ctx.upload)
+    assert n.push(outcomes, '2026-09-22') is True
+    body = ctx.calls[-1][1]
+    assert body['msgtype'] == 'markdown'
+
+
+def test_upload_failure_falls_back_to_markdown(server, cfg, outcomes):
+    ctx = _ImgCtx(upload_fail=True)
+    n = WeComAppNotifier(cfg, post=ctx.post, render=ctx.render, upload=ctx.upload)
+    assert n.push(outcomes, '2026-09-22') is True
+    body = ctx.calls[-1][1]
+    assert body['msgtype'] == 'markdown'
