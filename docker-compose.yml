@@ -1,0 +1,10 @@
+services:
+  ai-checkin:
+    build: .
+    container_name: ai-checkin
+    env_file: .env
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai

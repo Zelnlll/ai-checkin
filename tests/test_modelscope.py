@@ -1,8 +1,27 @@
+import json
+from pathlib import Path
+
 import pytest
 
 from app.http import OpError
 import app.platforms.modelscope as m
 from app.platforms.modelscope import ModelscopeAdapter
+
+
+def test_real_capture_fixture_replays_already(ms, local_server):
+    """黄金样本：2026-09-22 真实报文（checkin-capture/magicube.json）回放。"""
+    exchanges = json.loads(
+        (Path(__file__).parent / 'fixtures' / 'ms_capture.json')
+        .read_text(encoding='utf-8'))
+    rules = next(ex for ex in exchanges
+                 if ex['status'] == 200 and ex['url'].endswith('/earn/rules'))
+    local_server.route('GET', '/openapi/v1/magicubes/earn/rules',
+                       body=rules['response_body'])
+    r = ms.checkin({'token': 'ms-x', 'cookie': 'm_session_id=y'})
+    assert r.state == 'already'
+    assert '250' in r.reward                    # daily_active 200 + aliyun_bindlogin 50
+    # 真实请求头契约：Bearer + Accept json
+    assert rules['request_headers']['Accept'] == 'application/json'
 
 
 def _rules(earned_daily, earned_bind=0):
