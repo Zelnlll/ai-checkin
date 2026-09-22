@@ -81,3 +81,10 @@ def test_business_code_is_error_not_auth(dazi, local_server):
                        body={"code": 50001, "message": "internal quota error"})
     r = dazi.checkin({'cookie': COOKIE})
     assert r.state == 'error' and '50001' in r.message
+
+
+def test_credits_sums_subscription(dazi, local_server):
+    local_server.route('GET', '/api/dumate/points/quota_overview',
+                       body={"code": 0, "result": {"subscription":
+                            [{"totalPoints": 100}, {"totalPoints": 50}]}})
+    assert dazi.credits({'cookie': COOKIE}) == '150'

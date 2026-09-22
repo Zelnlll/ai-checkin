@@ -72,3 +72,9 @@ def test_sends_cookie_and_referer_headers(wps, local_server):
     headers = local_server.received[-1]['headers']
     assert headers['Cookie'] == 'wps_sid=abc'
     assert 'lingxi' in headers['Referer'] or local_server.base in headers['Referer']
+
+
+def test_credits_returns_total_balance(wps, local_server):
+    local_server.route('GET', '/api/public/v1/credits/balance',
+                       body={"data": {"total_balance": 2592}})
+    assert wps.credits({'cookie': 'wps_sid=abc'}) == '2592'

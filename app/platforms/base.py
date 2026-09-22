@@ -13,6 +13,8 @@ class CheckinResult:
     state: str
     message: str
     reward: str = ''
+    balance: str = ''
+    streak: int = 0
 
     def __post_init__(self):
         if self.state not in VALID_STATES:
@@ -29,6 +31,10 @@ class Adapter:
 
     def checkin(self, creds: dict[str, Any]) -> CheckinResult:
         raise NotImplementedError
+
+    def credits(self, creds: dict[str, Any]) -> str | None:
+        """可选：返回可用余额展示串（如 '2592'），None=不支持。"""
+        return None
 
     def token_status(self, creds: dict[str, Any]) -> dict[str, Any]:
         return {'known': False, 'expired': False, 'expires_at': '', 'days_left': None}

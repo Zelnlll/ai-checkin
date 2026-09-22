@@ -102,6 +102,15 @@ class BaiduDaziAdapter(Adapter):
                               kind='auth') from None
             raise
 
+    def credits(self, creds: dict[str, Any]) -> str | None:
+        url = (f'{DUMATE_BASE}/api/dumate/points/quota_overview'
+               '?timezone=Asia/Shanghai&clientType=desktop&ignoreLoginBonus=true')
+        result = _unwrap(http_json('GET', url, _headers(str(creds.get('cookie') or ''))))
+        total = sum(int(i.get('totalPoints') or 0)
+                    for i in (result or {}).get('subscription') or []
+                    if isinstance(i, dict))
+        return str(total) if total else None
+
     def token_status(self, creds: dict[str, Any]) -> dict[str, Any]:
         return {'known': False, 'expired': False, 'expires_at': '', 'days_left': None}
 

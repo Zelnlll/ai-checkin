@@ -76,4 +76,11 @@ class WpsLingxiAdapter(Adapter):
         return CheckinResult('ok', f'WPS 灵犀签到成功 +{reward} 积分', f'+{reward} 积分')
 
 
+    def credits(self, creds: dict[str, Any]) -> str | None:
+        resp = http_json('GET', f'{WPS_BASE}/api/public/v1/credits/balance',
+                         _headers(str(creds.get('cookie') or '')))
+        value = (resp.get('data') or {}).get('total_balance') if isinstance(resp, dict) else None
+        return str(value) if value is not None else None
+
+
 register(WpsLingxiAdapter())

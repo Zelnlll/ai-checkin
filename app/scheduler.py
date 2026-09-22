@@ -3,12 +3,30 @@
 from __future__ import annotations
 
 from collections import namedtuple
+from dataclasses import replace
 from typing import Any, Callable
 
 from app.platforms import get_adapter
 from app.platforms.base import CheckinResult
 
 CheckinOutcome = namedtuple('CheckinOutcome', ['platform', 'result'])
+
+
+def _enrich(adapter: Any, creds: dict, result: CheckinResult,
+            state: Any, platform: str, today: str) -> CheckinResult:
+    streak = 0
+    try:
+        streak = state.streak(platform, today)
+    except Exception:
+        pass
+    balance = ''
+    try:
+        value = adapter.credits(creds)
+        if value:
+            balance = str(value)
+    except Exception:
+        pass
+    return replace(result, balance=balance, streak=streak)
 
 
 def should_fire(now_minutes: int, checkin_time: tuple[int, int]) -> bool:
@@ -24,7 +42,9 @@ def run_all(platforms: list[str], *, store: Any, state: Any, config: Any,
         adapter = get_adapter(platform)
         if state.done_today(platform):
             outcomes.append(CheckinOutcome(
-                platform, CheckinResult('already', '今日已完成，跳过')))
+                platform, _enrich(adapter, store.load(platform) or {},
+                                  CheckinResult('already', '今日已完成，跳过'),
+                                  state, platform, today)))
             continue
         creds = store.load(platform)
         if not creds:
@@ -33,6 +53,7 @@ def run_all(platforms: list[str], *, store: Any, state: Any, config: Any,
             continue
         result = run_platform(adapter, creds, config)
         if result.done():
+            result = _enrich(adapter, creds, result, state, platform, today)
             state.mark(platform, result, today)   # 失败不落 done，留给重试
         outcomes.append(CheckinOutcome(platform, result))
     return outcomes

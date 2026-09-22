@@ -50,3 +50,10 @@ def test_default_token_status_unknown():
 
     assert Bare().token_status({}) == {
         'known': False, 'expired': False, 'expires_at': '', 'days_left': None}
+
+
+def test_result_has_balance_and_streak_fields():
+    r = CheckinResult('ok', 'x', '+1', balance='2592', streak=3)
+    assert r.balance == '2592' and r.streak == 3
+    assert CheckinResult('ok', 'x').balance == ''
+    assert CheckinResult('ok', 'x').streak == 0

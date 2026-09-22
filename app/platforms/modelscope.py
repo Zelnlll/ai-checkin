@@ -83,5 +83,16 @@ class ModelscopeAdapter(Adapter):
                                  f'+{earned} 魔粒')
         return CheckinResult('busy', '今日未发放，将在重试窗口再查')
 
+    def credits(self, creds: dict[str, Any]) -> str | None:
+        resp = http_json('GET', f'{MS_BASE}/openapi/v1/magicubes/balance', {
+            'Authorization': f"Bearer {str(creds.get('token') or '').strip()}",
+            'Accept': 'application/json',
+            'User-Agent': BROWSER_UA,
+        })
+        if isinstance(resp, dict) and resp.get('success'):
+            value = (resp.get('data') or {}).get('available_balance')
+            return str(value) if value is not None else None
+        return None
+
 
 register(ModelscopeAdapter())

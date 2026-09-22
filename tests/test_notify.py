@@ -111,3 +111,31 @@ def test_textcard_per_platform_dots(adapters_registered):
     assert '🔵 百度搭子' in d
     assert '🟣 MiniMax Code' in d
     assert '⚫ Qoder' in d
+
+
+def test_textcard_line_shows_balance_and_streak(adapters_registered):
+    from app.notify import build_textcard
+    msg = build_textcard([
+        CheckinOutcome('wps', CheckinResult('ok', '成功', '+100 积分',
+                                            balance='2592', streak=3)),
+    ], '2026-09-22')
+    d = msg['textcard']['description']
+    assert '🟢 WPS 灵犀 +100 积分｜余2592｜连3天' in d
+
+
+def test_textcard_omits_absent_extras(adapters_registered):
+    from app.notify import build_textcard
+    msg = build_textcard([
+        CheckinOutcome('wps', CheckinResult('ok', '成功', '+100 积分', streak=1)),
+    ], '2026-09-22')
+    d = msg['textcard']['description']
+    assert '余' not in d and '连' not in d
+
+
+def test_textcard_busy_line_shows_reason_not_signed(adapters_registered):
+    from app.notify import build_textcard
+    msg = build_textcard([
+        CheckinOutcome('modelscope', CheckinResult('busy', '今日未发放，稍后再查')),
+    ], '2026-09-22')
+    d = msg['textcard']['description']
+    assert '今日未发放' in d and '已签到' not in d

@@ -97,3 +97,10 @@ def test_sends_bearer_header(ms, local_server):
     ms.checkin(CREDS)
     headers = local_server.received[-1]['headers']
     assert headers['Authorization'] == 'Bearer ms-test-token'
+
+
+def test_credits_returns_available_balance(ms, local_server):
+    local_server.route('GET', '/openapi/v1/magicubes/balance',
+                       body={"success": True,
+                             "data": {"available_balance": 480}})
+    assert ms.credits({'token': 'ms-x', 'cookie': 'c'}) == '480'

@@ -128,9 +128,25 @@ class MinimaxAdapter(Adapter):
                 raise OpError(f'token 失效或签名异常：{exc}', kind='auth') from None
             raise
 
+    def credits(self, creds: dict[str, Any]) -> str | None:
+        import datetime as dt
+        token = str(creds.get('token') or '').strip()
+        data = _unwrap(_request(
+            '/minimax-cloud/api/v1/credit/details?timezone_id=Asia/Shanghai',
+            None, token))
+        today = dt.date.today().isoformat()
+        total = 0
+        for item in data.get('details') or []:
+            if not isinstance(item, dict):
+                continue
+            expire = str(item.get('expire_time') or item.get('expire_at') or '')
+            if expire and expire[:10] < today:
+                continue
+            total += int(item.get('remain') or item.get('amount') or 0)
+        return str(total) if total else None
+
     def token_status(self, creds: dict[str, Any]) -> dict[str, Any]:
         from app.http import jwt_exp_s
-        import datetime as dt
         exp = jwt_exp_s(str(creds.get('token') or ''))
         if not exp:
             return {'known': False, 'expired': False, 'expires_at': '', 'days_left': None}

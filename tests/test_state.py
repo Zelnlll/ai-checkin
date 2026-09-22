@@ -36,3 +36,32 @@ def test_corrupt_state_file_recovers_to_empty(tmp_path):
     assert not st.done_today('wps')
     st.mark('wps', CheckinResult('ok', 'x'), '2026-09-22')
     assert st.done_today('wps')
+
+
+def test_streak_counts_consecutive_days(tmp_path):
+    from app.platforms.base import CheckinResult as R
+    st = DailyState(tmp_path)
+    for day in ('2026-09-20', '2026-09-21', '2026-09-22'):
+        st.mark('wps', R('ok', 'x'), day)
+    assert st.streak('wps', '2026-09-22') == 3
+
+
+def test_streak_breaks_on_gap(tmp_path):
+    from app.platforms.base import CheckinResult as R
+    st = DailyState(tmp_path)
+    st.mark('wps', R('ok', 'x'), '2026-09-19')
+    st.mark('wps', R('ok', 'x'), '2026-09-21')
+    st.mark('wps', R('ok', 'x'), '2026-09-22')
+    assert st.streak('wps', '2026-09-22') == 2
+
+
+def test_streak_from_yesterday_when_today_pending(tmp_path):
+    from app.platforms.base import CheckinResult as R
+    st = DailyState(tmp_path)
+    st.mark('wps', R('ok', 'x'), '2026-09-20')
+    st.mark('wps', R('ok', 'x'), '2026-09-21')
+    assert st.streak('wps', '2026-09-22') == 2   # 今天还没签，连签按昨天截止
+
+
+def test_streak_zero_when_never(tmp_path):
+    assert DailyState(tmp_path).streak('wps', '2026-09-22') == 0

@@ -72,3 +72,73 @@ def test_failed_platform_is_not_marked_done(stub_registered):
                        run_platform=lambda adapter, creds, cfg: CheckinResult('error', 'HTTP 500'))
     assert outcomes[0].result.state == 'error'
     assert state.marked == []
+
+
+class Cred(Adapter):
+    platform = 'cred'
+    title = 'Cred'
+    credential_kind = 'token'
+
+    def __init__(self, balance='2592'):
+        self._balance = balance
+
+    def checkin(self, creds):
+        return CheckinResult('ok', '签到成功', '+100 积分')
+
+    def credits(self, creds):
+        if self._balance is None:
+            raise RuntimeError('余额接口挂了')
+        return self._balance
+
+
+@pytest.fixture
+def cred_registered():
+    ADAPTERS['cred'] = Cred()
+    yield
+    del ADAPTERS['cred']
+
+
+def test_success_result_enriched_with_balance_and_streak(cred_registered):
+    state = FakeState(streaks={'cred': 3})
+    outcomes = run_all(['cred'], store=FakeStore({'cred': {'token': 't'}}),
+                       state=state, config=FakeConfig(),
+                       today='2026-09-22', now_minutes=10 * 60 + 6,
+                       run_platform=lambda a, c, cfg: CheckinResult('ok', '成功', '+1'))
+    r = outcomes[0].result
+    assert r.balance == '2592' and r.streak == 3
+
+
+def test_already_skipped_path_also_enriched(cred_registered):
+    state = FakeState(done={'cred'}, streaks={'cred': 5})
+    outcomes = run_all(['cred'], store=FakeStore({'cred': {'token': 't'}}),
+                       state=state, config=FakeConfig(),
+                       today='2026-09-22', now_minutes=10 * 60 + 6,
+                       run_platform=never_call)
+    r = outcomes[0].result
+    assert r.state == 'already' and r.balance == '2592' and r.streak == 5
+
+
+def test_credits_failure_does_not_break_flow(monkeypatch):
+    ADAPTERS['cred'] = Cred(balance=None)
+    try:
+        outcomes = run_all(['cred'], store=FakeStore({'cred': {'token': 't'}}),
+                           state=FakeState(streaks={'cred': 1}), config=FakeConfig(),
+                           today='2026-09-22', now_minutes=10 * 60 + 6,
+                           run_platform=lambda a, c, cfg: CheckinResult('ok', '成功', '+1'))
+    finally:
+        del ADAPTERS['cred']
+    r = outcomes[0].result
+    assert r.state == 'ok' and r.balance == '' and r.streak == 1
+
+
+def test_error_result_not_enriched(cred_registered):
+    outcomes = run_all(['cred'], store=FakeStore({'cred': {'token': 't'}}),
+                       state=FakeState(), config=FakeConfig(),
+                       today='2026-09-22', now_minutes=10 * 60 + 6,
+                       run_platform=lambda a, c, cfg: CheckinResult('error', 'HTTP 500'))
+    r = outcomes[0].result
+    assert r.balance == '' and r.streak == 0
+
+
+def never_call(*a):
+    raise AssertionError('不应调用')

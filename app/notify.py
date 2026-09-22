@@ -49,8 +49,16 @@ def build_textcard(outcomes: list[CheckinOutcome], today: str) -> dict[str, Any]
     lines = [today]
     for o in outcomes:
         r = o.result
-        detail = r.reward or (r.message if r.state == 'error' else '已签到')
-        lines.append(f'{_dot(o)} {_title(o)} {detail}'[:40])
+        detail = r.reward or (r.message if r.state in ('error', 'busy') else '已签到')
+        extras = []
+        if r.balance:
+            extras.append(f'余{r.balance}')
+        if r.streak >= 2:
+            extras.append(f'连{r.streak}天')
+        text = f'{_dot(o)} {_title(o)} {detail}'
+        if extras:
+            text += '｜' + '｜'.join(extras)
+        lines.append(text[:40])
     rows = lines[:]
     while len(chr(10).join(rows).encode('utf-8')) > 500 and len(rows) > 2:
         rows.pop()

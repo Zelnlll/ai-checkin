@@ -127,3 +127,14 @@ def test_missing_token_raises_auth():
     with pytest.raises(OpError) as exc:
         MinimaxAdapter().checkin({'token': ''})
     assert exc.value.kind == 'auth'
+
+
+def test_credits_sums_valid_packages(mm, local_server):
+    local_server.route('GET', '/minimax-cloud/api/v1/credit/details',
+                       body={"base_resp": {"status_code": 0}, "data": {"details": [
+                           {"amount": 100, "remain": 80,
+                            "expire_time": "2099-01-01T00:00:00+08:00"},
+                           {"amount": 50, "remain": 50,
+                            "expire_time": "2000-01-01T00:00:00+08:00"},
+                       ]}})
+    assert mm.credits({'token': 'jwt'}) == '80'

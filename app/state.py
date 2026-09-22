@@ -46,3 +46,20 @@ class DailyState:
         today = dt.date.today().isoformat()
         rec = self.get(platform, today)
         return bool(rec) and rec.get('state') in ('ok', 'already')
+
+    def streak(self, platform: str, day: str) -> int:
+        """连续签到天数：day 当天未签则从昨天往前数。"""
+        data = self._load()
+
+        def done(d: str) -> bool:
+            rec = data.get(d, {}).get(platform)
+            return bool(rec) and rec.get('state') in ('ok', 'already')
+
+        cursor = dt.date.fromisoformat(day)
+        if not done(cursor.isoformat()):
+            cursor -= dt.timedelta(days=1)
+        count = 0
+        while done(cursor.isoformat()):
+            count += 1
+            cursor -= dt.timedelta(days=1)
+        return count
