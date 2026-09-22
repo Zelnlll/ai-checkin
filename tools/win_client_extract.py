@@ -46,6 +46,10 @@ def extract_modelscope(inbox: Path) -> bool:
 
 
 def main() -> int:
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
     inbox = Path(sys.argv[2] if len(sys.argv) > 2 and sys.argv[1] == '--inbox'
                  else './inbox')
     ok = extract_modelscope(inbox)
