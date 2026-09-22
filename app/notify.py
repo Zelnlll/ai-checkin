@@ -13,7 +13,7 @@ from app.scheduler import CheckinOutcome
 logger = logging.getLogger(__name__)
 
 _PLATFORM_DOT = {'wps': '🟢', 'dazi': '🔵', 'minimax': '🟣',
-                 'qoder': '⚫', 'modelscope': '🟠'}
+                 'qoder': '🟡', 'modelscope': '🟠'}
 
 
 def _dot(o: CheckinOutcome) -> str:

@@ -110,7 +110,7 @@ def test_textcard_per_platform_dots(adapters_registered):
     d = msg['textcard']['description']
     assert '🔵 百度搭子' in d
     assert '🟣 MiniMax' in d
-    assert '⚫ Qoder' in d
+    assert '🟡 Qoder' in d
 
 
 def test_textcard_line_shows_balance_and_streak(adapters_registered):
@@ -150,6 +150,6 @@ def test_textcard_lines_fit_one_row(adapters_registered):
     ], '2026-09-22')
     d = msg['textcard']['description']
     assert '🟣 MiniMax +400｜余2262｜连4天' in d   # 短名+去"积分"
-    assert '⚫ Qoder +100' in d and 'Cr' not in d   # 单位全删
+    assert '🟡 Qoder +100' in d and 'Cr' not in d   # 单位全删
     for line in d.split(chr(10)):
         assert len(line) <= 26                     # 手机单行预算
