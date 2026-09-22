@@ -18,6 +18,7 @@ PLATFORM_LOGIN: dict[str, dict[str, Any]] = {
     'dazi': {'url': 'https://console.bce.baidu.com/', 'cookie': 'bce-user-info'},
     'modelscope': {'url': 'https://www.modelscope.cn/', 'cookie': 'm_session_id'},
     'minimax': {'url': 'https://agent.minimaxi.com/', 'local_storage': 'token'},
+    'linkai': {'url': 'https://link-ai.tech/console/account', 'local_storage': 'token'},
 }
 
 

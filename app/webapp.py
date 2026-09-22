@@ -20,7 +20,7 @@ from app.state import DailyState
 
 _ACCENTS = {
     'wps': '#22b14c', 'dazi': '#3b82f6', 'minimax': '#8b5cf6',
-    'qoder': '#ca8a04', 'modelscope': '#f59e0b',
+    'qoder': '#ca8a04', 'modelscope': '#f59e0b', 'linkai': '#06b6d4',
 }
 _PILL = {
     'ok': ('今天已签到 ✅', '#e7f7ec', '#16a34a'),
@@ -29,7 +29,7 @@ _PILL = {
     'error': ('失败 ❌', '#fee2e2', '#dc2626'),
     '': ('今日未执行', '#f3f4f6', '#6b7280'),
 }
-_BROWSER_LOGIN = {'wps', 'dazi', 'minimax', 'modelscope'}
+_BROWSER_LOGIN = {'wps', 'dazi', 'minimax', 'modelscope', 'linkai'}
 # 平台 → 需要的凭证字段与提示（魔搭双入口：只填令牌也能与已存 Cookie 增量合并）
 _CRED_FIELDS = {
     'wps': [('cookie', 'Cookie 整串（含 wps_sid）')],
@@ -38,6 +38,7 @@ _CRED_FIELDS = {
     'qoder': [('token', 'Bearer 后的 dt- 设备令牌（抓包 openapi.qoder.com.cn）')],
     'modelscope': [('cookie', '会话 Cookie 整串（含 m_session_id）'),
                    ('token', 'SDK 令牌（ms- 开头，个人中心）')],
+    'linkai': [('token', 'JWT（扫描客户端自动获取，或 F12 console.log(localStorage.token)）')],
 }
 
 

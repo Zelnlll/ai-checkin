@@ -17,6 +17,6 @@ def get_adapter(platform: str) -> Adapter:
 
 # 各适配器任务落地后在此追加 import（显式、可 grep）：
 from app.platforms import (  # noqa: E402,F401
-    wps_lingxi, baidu_dazi, minimax, qoder, modelscope)
+    wps_lingxi, baidu_dazi, minimax, qoder, modelscope, linkai)
 
 __all__ = ['ADAPTERS', 'Adapter', 'CheckinResult', 'register', 'get_adapter']
