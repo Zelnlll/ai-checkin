@@ -49,6 +49,12 @@ class DailyState:
         rec = self.get(platform, today)
         return bool(rec) and rec.get('state') in ('ok', 'already')
 
+    def touch_keepalive(self, platform: str, day: str) -> None:
+        data = self._load()
+        rec = data.setdefault(day, {}).setdefault(platform, {})
+        rec['keepalive'] = day
+        self._save(data)
+
     def streak(self, platform: str, day: str) -> int:
         """连续签到天数：day 当天未签则从昨天往前数。"""
         data = self._load()

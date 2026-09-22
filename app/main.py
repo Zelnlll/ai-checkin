@@ -51,6 +51,11 @@ def cmd_run_once(cfg: Config, *, platforms: list[str] | None = None,
     state = state or DailyState(cfg.data_dir)
     notifier = notifier or choose_notifier(cfg)
     runner_fn = runner_fn or _default_runner(cfg)
+    try:
+        from app.scanner import scan_local_accounts
+        scan_local_accounts(cfg.data_dir / 'inbox')
+    except Exception:
+        pass
     imported = store.import_inbox()
     if imported:
         logger.info('inbox 导入凭证：%s', imported)
@@ -89,6 +94,14 @@ def cmd_daemon(cfg: Config) -> None:
                 cmd_run_once(cfg)
             except Exception:
                 logger.exception('本轮签到异常')
+            try:
+                from app.scheduler import run_keepalive
+                store = CredentialStore(cfg.data_dir, set(ADAPTERS))
+                results = run_keepalive(store, DailyState(cfg.data_dir),
+                                        list(ADAPTERS), dt.date.today().isoformat())
+                logger.info('保活结果：%s', results)
+            except Exception:
+                logger.exception('保活异常')
         time.sleep(TICK_SECONDS)
 
 
@@ -118,6 +131,8 @@ def main(argv: list[str] | None = None) -> int:
     p_once.add_argument('platforms', nargs='*')
     sub.add_parser('daemon')
     sub.add_parser('import')
+    sub.add_parser('scan')
+    sub.add_parser('keepalive')
     sub.add_parser('status')
     p_web = sub.add_parser('web')
     p_web.add_argument('--port', type=int, default=8000)
@@ -135,6 +150,18 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == 'import':
         store = CredentialStore(cfg.data_dir, set(ADAPTERS))
         print(store.import_inbox() or 'inbox 无新凭证')
+    elif args.command == 'scan':
+        from app.scanner import scan_local_accounts
+        found = scan_local_accounts(cfg.data_dir / 'inbox')
+        store = CredentialStore(cfg.data_dir, set(ADAPTERS))
+        store.import_inbox()
+        print('已导入：' + '、'.join(found) if found else '未发现可导入账号')
+    elif args.command == 'keepalive':
+        from app.scheduler import run_keepalive
+        store = CredentialStore(cfg.data_dir, set(ADAPTERS))
+        results = run_keepalive(store, DailyState(cfg.data_dir),
+                                list(ADAPTERS), dt.date.today().isoformat())
+        print(results or '无已导入凭证的平台')
     elif args.command == 'status':
         cmd_status(cfg)
     elif args.command == 'web':

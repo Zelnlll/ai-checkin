@@ -142,3 +142,30 @@ def test_error_result_not_enriched(cred_registered):
 
 def never_call(*a):
     raise AssertionError('不应调用')
+
+
+def test_touch_keepalive_and_read(tmp_path):
+    from app.state import DailyState
+    st = DailyState(tmp_path)
+    st.touch_keepalive('wps', '2026-09-22')
+    assert st.get('wps', '2026-09-22')['keepalive'] == '2026-09-22'
+    st.mark('wps', CheckinResult('ok', '成功', '+1'), '2026-09-22')
+    st.touch_keepalive('wps', '2026-09-22')
+    rec = st.get('wps', '2026-09-22')
+    assert rec['state'] == 'ok' and rec['keepalive'] == '2026-09-22'
+
+
+def test_run_keepalive_pings_credentialed_platforms(cred_registered):
+    from app.scheduler import run_keepalive
+    calls = []
+
+    class PingCred(Cred):
+        def credits(self, creds):
+            calls.append(creds['token'])
+            return '100'
+
+    ADAPTERS['cred'] = PingCred()
+    state = FakeState()
+    result = run_keepalive(FakeStore({'cred': {'token': 't1'}}), state,
+                           ['cred', 'wps'], today='2026-09-22')
+    assert result == {'cred': True} and calls == ['t1']   # wps 无凭证跳过

@@ -33,6 +33,21 @@ def should_fire(now_minutes: int, checkin_time: tuple[int, int]) -> bool:
     return now_minutes >= checkin_time[0] * 60 + checkin_time[1]
 
 
+def run_keepalive(store: Any, state: Any, platforms: list[str],
+                  today: str) -> dict[str, bool]:
+    """对已导入凭证的平台发一次轻量已认证请求续会话，成功则记保活日期。"""
+    results: dict[str, bool] = {}
+    for platform in platforms:
+        creds = store.load(platform)
+        if not creds:
+            continue
+        ok = get_adapter(platform).keepalive(creds)
+        if ok:
+            state.touch_keepalive(platform, today)
+        results[platform] = bool(ok)
+    return results
+
+
 def run_all(platforms: list[str], *, store: Any, state: Any, config: Any,
             today: str, now_minutes: int,
             run_platform: Callable[[Any, dict, Any], CheckinResult]

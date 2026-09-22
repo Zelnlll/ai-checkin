@@ -1,0 +1,53 @@
+"""扫描本机（服务运行机器）已捕获的平台凭证 → 写入 inbox。
+
+来源：~/.wb-switch/agent_accounts.json（wb-switch 捕获的各家 token/cookie 混存字段）、
+~/.wb-switch/modelscope_login.json（魔搭会话）。仅导入本项目支持的平台。
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+_COOKIE_PLATFORMS = {'wps', 'dazi'}
+_SUPPORTED = {'wps', 'dazi', 'minimax', 'qoder'}
+
+
+def scan_local_accounts(inbox: Path, home: Path | None = None) -> list[str]:
+    home = home or Path.home()
+    inbox = Path(inbox)
+    found: list[str] = []
+    accounts_file = home / '.wb-switch' / 'agent_accounts.json'
+    if accounts_file.exists():
+        try:
+            accounts = json.loads(accounts_file.read_text(encoding='utf-8'))
+        except Exception:
+            accounts = []
+        for acc in accounts if isinstance(accounts, list) else []:
+            platform = acc.get('platform') if isinstance(acc, dict) else None
+            token = str(acc.get('token') or '') if isinstance(acc, dict) else ''
+            if platform not in _SUPPORTED or not token or acc.get('needs_relogin'):
+                continue
+            creds = {'cookie': token} if platform in _COOKIE_PLATFORMS else {'token': token}
+            found.append(_write(inbox, platform, creds))
+    ms_file = home / '.wb-switch' / 'modelscope_login.json'
+    if ms_file.exists():
+        try:
+            data = json.loads(ms_file.read_text(encoding='utf-8'))
+        except Exception:
+            data = {}
+        cookie = str(data.get('cookie') or '')
+        if 'm_session_id' in cookie:
+            creds = {'cookie': cookie}
+            sdk = str(data.get('token') or data.get('sdk_token') or '')
+            if sdk.startswith('ms-'):
+                creds['token'] = sdk
+            found.append(_write(inbox, 'modelscope', creds))
+    return sorted(found)
+
+
+def _write(inbox: Path, platform: str, creds: dict) -> str:
+    inbox.mkdir(parents=True, exist_ok=True)
+    (inbox / f'{platform}.json').write_text(
+        json.dumps(creds, ensure_ascii=False), encoding='utf-8')
+    return platform

@@ -57,3 +57,27 @@ def test_result_has_balance_and_streak_fields():
     assert r.balance == '2592' and r.streak == 3
     assert CheckinResult('ok', 'x').balance == ''
     assert CheckinResult('ok', 'x').streak == 0
+
+
+def test_base_keepalive_uses_credits():
+    class WithCredits(Adapter):
+        platform = 'wc'
+        title = 'WC'
+        credential_kind = 'token'
+
+        def checkin(self, creds):
+            return CheckinResult('ok', 'x')
+
+        def credits(self, creds):
+            return '100'
+
+    class NoCredits(Adapter):
+        platform = 'nc'
+        title = 'NC'
+        credential_kind = 'token'
+
+        def checkin(self, creds):
+            return CheckinResult('ok', 'x')
+
+    assert WithCredits().keepalive({}) is True
+    assert NoCredits().keepalive({}) is False

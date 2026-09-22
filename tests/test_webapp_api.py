@@ -91,3 +91,27 @@ def test_settings_page_lists_platforms():
     ]})
     assert '设置' in html and 'WPS 灵犀' in html
     assert 'textarea' in html and '网页登录' in html
+
+
+def test_api_scan_endpoint(tmp_path, monkeypatch):
+    import app.webapp as webapp
+    monkeypatch.setattr(webapp, 'scan_local_accounts',
+                        lambda inbox, home=None: ['wps', 'qoder'])
+    cfg = Config((10, 5), 3, '', tmp_path)
+    httpd, base = _start_server(cfg)
+    try:
+        resp = _post(f'{base}/api/scan', {})
+        assert resp['ok'] is True and resp['platforms'] == ['wps', 'qoder']
+    finally:
+        httpd.shutdown(); httpd.server_close()
+
+
+def test_dashboard_shows_keepalive_row(tmp_path):
+    from app.webapp import render_html
+    cfg = Config((10, 5), 3, '', tmp_path)
+    store = CredentialStore(tmp_path, {'wps'})
+    store.save('wps', {'cookie': 'wps_sid=1'})
+    state = DailyState(tmp_path)
+    state.touch_keepalive('wps', date.today().isoformat())
+    html = render_html(collect_status(cfg, store, state, ['wps']))
+    assert '保活' in html

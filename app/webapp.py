@@ -15,6 +15,7 @@ from typing import Any
 
 from app.credentials import CredentialStore
 from app.platforms import ADAPTERS, get_adapter
+from app.scanner import scan_local_accounts
 from app.state import DailyState
 
 _ACCENTS = {
@@ -61,6 +62,7 @@ def collect_status(cfg, store: CredentialStore, state: DailyState,
             'state': rec.get('state', ''), 'message': rec.get('message', ''),
             'reward': rec.get('reward', ''), 'balance': rec.get('balance', ''),
             'streak': rec.get('streak', 0), 'at': rec.get('at', ''),
+            'keepalive': rec.get('keepalive', ''),
             'last_done': _last_done(state, platform, today),
             'credential': credential,
         })
@@ -72,7 +74,8 @@ def _rows(p: dict[str, Any]) -> str:
             ('余额', p['balance'] or '—'),
             ('连续签到', f"{p['streak']} 天" if p['streak'] else '—'),
             ('上次签到', p['last_done'] or '—'),
-            ('上次执行', p['at'] or '—')]
+            ('上次执行', p['at'] or '—'),
+            ('保活', p['keepalive'] or '—')]
     return '\n'.join(
         f'<div class="kv"><span>{k}</span><span>{v}</span></div>' for k, v in rows)
 
@@ -151,6 +154,12 @@ async function saveCred(p){
   const j = await r.json();
   alert(j.ok ? '凭证已保存并导入' : ('失败：'+j.message));
 }
+async function scanLocal(){
+  const r = await fetch('/api/scan',{method:'POST'});
+  const j = await r.json();
+  alert(j.ok && j.platforms.length ? ('已导入：'+j.platforms.join('、')) : (j.message || '未发现可导入账号'));
+  location.reload();
+}
 async function webLogin(p){
   alert('已发起网页登录，请稍候（最长5分钟）…');
   const r = await fetch('/api/login/'+p,{method:'POST'});
@@ -205,7 +214,9 @@ def render_settings(status: dict[str, Any]) -> str:
 <title>设置 · 签到中心</title><style>{_STYLE}</style><script>{_JS}</script></head>
 <body><div class="wrap">
 <div class="head"><div class="title">⚙️ 设置</div>
-<div class="slogan">导入各平台凭证 · <a href="/">返回签到中心</a></div></div>
+<div class="slogan">导入各平台凭证 · <a href="/">返回签到中心</a></div>
+<button class="btn blue" style="margin-top:10px;width:auto;padding:8px 16px"
+ onclick="scanLocal()">🔍 扫描本机账号导入</button></div>
 <div class="grid">
 {cards}
 </div></div></body></html>"""
@@ -252,6 +263,11 @@ class _Handler(BaseHTTPRequestHandler):
             payload = {}
         kind, _, platform = self.path.rpartition('/')
         head = kind.rstrip('/')
+        if self.path.startswith('/api/scan'):
+            found = scan_local_accounts(cfg.data_dir / 'inbox')
+            store.import_inbox()
+            self._json({'ok': True, 'platforms': found, 'message': '、'.join(found) or '未发现可导入账号'})
+            return
         if platform not in ADAPTERS:
             self._json({'ok': False, 'message': f'未知平台 {platform}'}, 404)
             return
@@ -272,6 +288,10 @@ class _Handler(BaseHTTPRequestHandler):
             r = outcomes[0].result
             self._json({'ok': r.state in ('ok', 'already'),
                         'state': r.state, 'message': r.message})
+        elif head.endswith('/api/scan'):
+            found = scan_local_accounts(cfg.data_dir / 'inbox')
+            store.import_inbox()
+            self._json({'ok': True, 'platforms': found, 'message': '、'.join(found) or '未发现可导入账号'})
         elif head.endswith('/api/login'):
             from app.browser_login import browser_login
             code = browser_login(cfg, platform, headless=True)

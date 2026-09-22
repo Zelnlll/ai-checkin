@@ -36,5 +36,12 @@ class Adapter:
         """可选：返回可用余额展示串（如 '2592'），None=不支持。"""
         return None
 
+    def keepalive(self, creds: dict[str, Any]) -> bool:
+        """轻量已认证请求续会话；默认借道 credits 查询（拿不到数=没续上）。"""
+        try:
+            return self.credits(creds) is not None
+        except Exception:
+            return False
+
     def token_status(self, creds: dict[str, Any]) -> dict[str, Any]:
         return {'known': False, 'expired': False, 'expires_at': '', 'days_left': None}

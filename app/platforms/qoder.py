@@ -79,6 +79,18 @@ class QoderAdapter(Adapter):
             return CheckinResult('already', '今日活动已领取')
         return CheckinResult('error', '当前无可领活动（每日 10:00 开放）')
 
+    def keepalive(self, creds: dict[str, Any]) -> bool:
+        # Qoder 无余额接口；campaigns GET 即已认证会话请求
+        token = str(creds.get('token') or '').strip()
+        if not token:
+            return False
+        try:
+            http_json('GET', f'{QODER_OPENAPI}/sash/api/v1/me/campaigns',
+                      _headers(token))
+            return True
+        except Exception:
+            return False
+
     def token_status(self, creds: dict[str, Any]) -> dict[str, Any]:
         import datetime as dt
         import time

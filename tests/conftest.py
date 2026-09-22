@@ -114,6 +114,9 @@ class FakeState:
     def streak(self, platform, day):
         return self._streaks.get(platform, 0)
 
+    def touch_keepalive(self, platform, day):
+        self.marked.append((platform, 'keepalive'))
+
 
 class FakeConfig:
     retry_times = 0
