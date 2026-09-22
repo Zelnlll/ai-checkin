@@ -1,6 +1,6 @@
 # AI 平台每日自动签到（Docker 版）
 
-每天定时为 **WPS灵犀 / MiniMax Code / 百度搭子 / Qoder / 魔搭** 自动签到，
+每天定时为 **WPS灵犀 / MiniMax Code / 百度搭子 / Qoder / 魔塔** 自动签到，
 结果通过企业微信群机器人卡片推送。适配器架构：**新增一个平台 = 在 `app/platforms/`
 加一个文件 + 注册表 import 一行**。
 
@@ -34,11 +34,11 @@ docker compose exec ai-checkin status   # 查看五平台凭证与今日状态
 | WPS 灵犀 | `docker compose exec ai-checkin python -m app.main login wps`（无头刷新）；首次扫码在 PC 端 `python -m app.main login wps --headful` | F12 复制 `lingxi.kdocs.cn` 请求 Cookie 整串 |
 | 百度搭子 | 同上 `login dazi` | 登录 `console.bce.baidu.com` F12 复制 Cookie（需含 `bce-user-info`） |
 | MiniMax | 同上 `login minimax`（自动抓 Cookie+localStorage token） | F12 复制任意请求头 `token`（JWT） |
-| 魔搭 | 同上 `login modelscope`；或 PC 端 `python tools/win_client_extract.py` 从 `~/.wb-switch/modelscope_login.json` 提取 | SDK 令牌（ms- 开头）在魔搭个人中心复制 |
+| 魔塔 | 同上 `login modelscope`；或 PC 端 `python tools/win_client_extract.py` 从 `~/.wb-switch/modelscope_login.json` 提取 | SDK 令牌（ms- 开头）在魔塔个人中心复制 |
 | Qoder | 不支持网页登录 | 抓包 `openapi.qoder.com.cn` 任意请求，复制 `Authorization: Bearer` 后的串（约 10 天由客户端轮换，过期重贴） |
 
 **inbox 信箱机制**：任何来源的凭证写成 `data/inbox/<platform>.json`
-（内容 `{"cookie": "..."}` 或 `{"token": "..."}`，魔搭两者都要），
+（内容 `{"cookie": "..."}` 或 `{"token": "..."}`，魔塔两者都要），
 容器启动与每轮任务前自动导入并改名为 `.imported`。
 PC 端跑 `login --headful` 后可把 `inbox/` 拷到 NAS 共享目录挂载的 `data/inbox/`。
 
@@ -69,7 +69,7 @@ python -m pytest            # 98 项，全离线（本地回环假服务器 + �
 
 ## 已知限制
 
-- **魔搭**：无 claim 接口，+250 魔粒/日由服务端按"登录日首访"判定。
+- **魔塔**：无 claim 接口，+250 魔粒/日由服务端按"登录日首访"判定。
   当前用 `earn/rules` 复查判定 + HTTP 首访触发；**纯 HTTP 触发能否首访发放待
   归因冒烟**（部署次日 00:00-00:10 跑 `run-once modelscope` 验证 transactions；
   测前停掉本机其它带 30 分钟 keepalive 的旧签到进程防抢发）。失败则把

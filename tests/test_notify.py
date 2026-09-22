@@ -75,7 +75,7 @@ def test_textcard_big_title_and_small_rows(adapters_registered):
     assert tc['title'] == '签到成功 2/2'
     assert tc['url'].startswith('http')
     assert '2026-09-22' in tc['description']
-    assert '🟢 WPS 灵犀 +100 积分' in tc['description']  # wps=绿
+    assert '🟢 WPS 灵犀 +100' in tc['description']
     assert '<' not in tc['description']   # 微信插件不解析 HTML，必须纯文本
 
 
@@ -109,7 +109,7 @@ def test_textcard_per_platform_dots(adapters_registered):
     ], '2026-09-22')
     d = msg['textcard']['description']
     assert '🔵 百度搭子' in d
-    assert '🟣 MiniMax Code' in d
+    assert '🟣 MiniMax' in d
     assert '⚫ Qoder' in d
 
 
@@ -150,6 +150,6 @@ def test_textcard_lines_fit_one_row(adapters_registered):
     ], '2026-09-22')
     d = msg['textcard']['description']
     assert '🟣 MiniMax +400｜余2262｜连4天' in d   # 短名+去"积分"
-    assert '⚫ Qoder +100Cr' in d                  # Credits→Cr
+    assert '⚫ Qoder +100' in d and 'Cr' not in d   # 单位全删
     for line in d.split(chr(10)):
         assert len(line) <= 26                     # 手机单行预算

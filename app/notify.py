@@ -26,7 +26,7 @@ _SHORT_TITLES = {'MiniMax Code': 'MiniMax'}
 def _compact(text: str) -> str:
     for word in (' 积分', ' 魔粒', '积分', '魔粒'):
         text = text.replace(word, '')
-    return text.replace('Credits', 'Cr').strip()
+    return text.replace(' Credits', '').replace('Credits', '').replace('Cr', '').strip()
 
 
 def _title(o: CheckinOutcome) -> str:

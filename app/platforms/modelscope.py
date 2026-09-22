@@ -59,7 +59,7 @@ def trigger_visit(cookie: str) -> None:
 
 class ModelscopeAdapter(Adapter):
     platform = 'modelscope'
-    title = '魔搭'
+    title = '魔塔'
     credential_kind = 'token'
 
     def checkin(self, creds: dict[str, Any]) -> CheckinResult:
@@ -79,7 +79,7 @@ class ModelscopeAdapter(Adapter):
         except _BusinessError as exc:
             return CheckinResult('error', str(exc))
         if earned > 0:
-            return CheckinResult('ok', f'魔搭首访触发发放成功 +{earned} 魔粒',
+            return CheckinResult('ok', f'魔塔首访触发发放成功 +{earned} 魔粒',
                                  f'+{earned} 魔粒')
         return CheckinResult('busy', '今日未发放，将在重试窗口再查')
 
