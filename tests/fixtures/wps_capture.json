@@ -1,0 +1,324 @@
+{
+  "note": "request_headers.Cookie 已掩码；完整 cookie 见 agent_accounts.json",
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "https://lingxi.kdocs.cn/api/public/v1/tasks",
+      "request_headers": {
+        "Cookie": "wps_sid=V02S...(masked)",
+        "Referer": "https://lingxi.kdocs.cn/",
+        "Origin": "https://lingxi.kdocs.cn",
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36"
+      },
+      "request_body": null,
+      "status": 200,
+      "response_headers": {
+        "Date": "Tue, 22 Sep 2026 05:37:03 GMT",
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Length": "1360",
+        "Connection": "close",
+        "Vary": "Accept-Encoding",
+        "access-control-allow-credentials": "true",
+        "access-control-allow-headers": "content-type,x-cc-region,x-csrftoken,ai-gateway-product-name,x-request-id,Aigc-Gateway-SecText-Scene,accept,ai-gateway-intention-code,Aigc-Gateway-SecText-From,x-user-query,ai-gateway-uid,x-client-version,x-user-token,x-region,x-cc-entrance,x-csrf-rand,x-client-channel,accept-language,Aigc-Gateway-Product-Name,client-request-id,Aigc-Gateway-Intention-Code,x-pop-token,x-server-id,x-client-request-id,x-requested-with,accept-encoding,x-client-type,x-device-id,X-Cc-Open-Position,x-biz-type,content-encoding,x-endpoint-id,x-action-id,x-cc-version,x-encryption-algorithm,x-encryption-param,x-encryption-app-key,x-encryption-id,x-cc-component,x-open-position, x-custom-aidesign-mode, x-custom-aidesign-alg-mode, x-custom-client-type, x-custom-client-version, x-custom-client-channel, x-custom-client-language, x-custom-user-hash,x-custom-aidesign-mode, x-custom-aidesign-alg-mode, x-custom-client-type, x-custom-client-version, x-custom-client-channel, x-custom-client-language, x-custom-user-hash",
+        "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "access-control-allow-origin": "https://lingxi.kdocs.cn",
+        "access-control-expose-headers": "content-type,x-cc-region,x-csrftoken,ai-gateway-product-name,x-request-id,Aigc-Gateway-SecText-Scene,accept,ai-gateway-intention-code,Aigc-Gateway-SecText-From,x-user-query,ai-gateway-uid,x-client-version,x-user-token,x-region,x-cc-entrance,x-csrf-rand,x-client-channel,accept-language,Aigc-Gateway-Product-Name,client-request-id,Aigc-Gateway-Intention-Code,x-pop-token,x-server-id,x-client-request-id,x-requested-with,accept-encoding,x-client-type,x-device-id,X-Cc-Open-Position,x-biz-type,content-encoding,x-endpoint-id,x-action-id,x-cc-version, x-custom-aidesign-mode, x-custom-aidesign-alg-mode, x-custom-client-type, x-custom-client-version, x-custom-client-channel, x-custom-client-language, x-custom-user-hash,x-custom-aidesign-mode, x-custom-aidesign-alg-mode, x-custom-client-type, x-custom-client-version, x-custom-client-channel, x-custom-client-language, x-custom-user-hash",
+        "x-region": "default",
+        "x-request-id": "4af344779e2d0e6424ffff8f356eabb5",
+        "x-trace-id": "4af344779e2d0e6424ffff8f356eabb5",
+        "x-envoy-upstream-service-time": "107",
+        "X-KLB": "2",
+        "Server": "elb"
+      },
+      "response_body": {
+        "data": {
+          "tasks": [
+            {
+              "task_key": "try_expert_mode",
+              "type": "one_time",
+              "title": "完整体验一次灵犀专家模式",
+              "description": "使用专家模式完成任意一次对话",
+              "reward_amount": 200,
+              "status": "incomplete",
+              "action": "expert_mode"
+            },
+            {
+              "task_key": "try_group_chat",
+              "type": "one_time",
+              "title": "体验一次群聊功能",
+              "description": "创建或加入任意一个群聊",
+              "reward_amount": 400,
+              "status": "incomplete",
+              "action": "group_chat"
+            },
+            {
+              "task_key": "use_lingxi_client",
+              "type": "one_time",
+              "title": "使用灵犀客户端",
+              "description": "安装灵犀客户端并发起一次对话",
+              "reward_amount": 800,
+              "status": "incomplete",
+              "action": "download_client"
+            },
+            {
+              "task_key": "daily_check_in",
+              "type": "daily",
+              "title": "每日签到",
+              "description": "每天签到领取智点",
+              "reward_amount": 100,
+              "status": "claimed",
+              "extra": {
+                "check_in_days": [
+                  {
+                    "day": 1,
+                    "date": "2026-09-21",
+                    "reward": 100,
+                    "status": "claimed"
+                  },
+                  {
+                    "day": 2,
+                    "date": "2026-09-22",
+                    "reward": 100,
+                    "status": "claimed"
+                  },
+                  {
+                    "day": 3,
+                    "date": "2026-09-23",
+                    "reward": 100,
+                    "status": "locked"
+                  },
+                  {
+                    "day": 4,
+                    "date": "2026-09-24",
+                    "reward": 100,
+                    "status": "locked"
+                  },
+                  {
+                    "day": 5,
+                    "date": "2026-09-25",
+                    "reward": 100,
+                    "status": "locked"
+                  },
+                  {
+                    "day": 6,
+                    "date": "2026-09-26",
+                    "reward": 100,
+                    "status": "locked"
+                  },
+                  {
+                    "day": 7,
+                    "date": "2026-09-27",
+                    "reward": 200,
+                    "status": "locked"
+                  }
+                ],
+                "consecutive_days": 2,
+                "today_day": 2,
+                "today_reward": 100
+              }
+            }
+          ],
+          "total_claimed_credits": 200
+        },
+        "result": "ok",
+        "v7code": 0
+      }
+    },
+    {
+      "method": "POST",
+      "url": "https://lingxi.kdocs.cn/api/public/v1/tasks/daily_check_in/claim",
+      "request_headers": {
+        "Cookie": "wps_sid=V02S...(masked)",
+        "Referer": "https://lingxi.kdocs.cn/",
+        "Origin": "https://lingxi.kdocs.cn",
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36"
+      },
+      "request_body": "{}",
+      "status": 200,
+      "response_headers": {
+        "Date": "Tue, 22 Sep 2026 05:37:03 GMT",
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Length": "676",
+        "Connection": "close",
+        "access-control-allow-credentials": "true",
+        "access-control-allow-headers": "content-type,x-cc-region,x-csrftoken,ai-gateway-product-name,x-request-id,Aigc-Gateway-SecText-Scene,accept,ai-gateway-intention-code,Aigc-Gateway-SecText-From,x-user-query,ai-gateway-uid,x-client-version,x-user-token,x-region,x-cc-entrance,x-csrf-rand,x-client-channel,accept-language,Aigc-Gateway-Product-Name,client-request-id,Aigc-Gateway-Intention-Code,x-pop-token,x-server-id,x-client-request-id,x-requested-with,accept-encoding,x-client-type,x-device-id,X-Cc-Open-Position,x-biz-type,content-encoding,x-endpoint-id,x-action-id,x-cc-version,x-encryption-algorithm,x-encryption-param,x-encryption-app-key,x-encryption-id,x-cc-component,x-open-position, x-custom-aidesign-mode, x-custom-aidesign-alg-mode, x-custom-client-type, x-custom-client-version, x-custom-client-channel, x-custom-client-language, x-custom-user-hash,x-custom-aidesign-mode, x-custom-aidesign-alg-mode, x-custom-client-type, x-custom-client-version, x-custom-client-channel, x-custom-client-language, x-custom-user-hash",
+        "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "access-control-allow-origin": "https://lingxi.kdocs.cn",
+        "access-control-expose-headers": "content-type,x-cc-region,x-csrftoken,ai-gateway-product-name,x-request-id,Aigc-Gateway-SecText-Scene,accept,ai-gateway-intention-code,Aigc-Gateway-SecText-From,x-user-query,ai-gateway-uid,x-client-version,x-user-token,x-region,x-cc-entrance,x-csrf-rand,x-client-channel,accept-language,Aigc-Gateway-Product-Name,client-request-id,Aigc-Gateway-Intention-Code,x-pop-token,x-server-id,x-client-request-id,x-requested-with,accept-encoding,x-client-type,x-device-id,X-Cc-Open-Position,x-biz-type,content-encoding,x-endpoint-id,x-action-id,x-cc-version, x-custom-aidesign-mode, x-custom-aidesign-alg-mode, x-custom-client-type, x-custom-client-version, x-custom-client-channel, x-custom-client-language, x-custom-user-hash,x-custom-aidesign-mode, x-custom-aidesign-alg-mode, x-custom-client-type, x-custom-client-version, x-custom-client-channel, x-custom-client-language, x-custom-user-hash",
+        "x-region": "default",
+        "x-request-id": "3b3c52193d6976c275372df4abe1faf5",
+        "x-trace-id": "3b3c52193d6976c275372df4abe1faf5",
+        "x-envoy-upstream-service-time": "27",
+        "X-KLB": "2",
+        "Server": "elb"
+      },
+      "response_body": {
+        "data": {
+          "task_key": "daily_check_in",
+          "reward_amount": 100,
+          "trade_no": "lx_task_240048428_daily_check_in_1725453",
+          "total_claimed_credits": 200,
+          "extra": {
+            "check_in_days": [
+              {
+                "day": 1,
+                "date": "2026-09-21",
+                "reward": 100,
+                "status": "claimed"
+              },
+              {
+                "day": 2,
+                "date": "2026-09-22",
+                "reward": 100,
+                "status": "claimed"
+              },
+              {
+                "day": 3,
+                "date": "2026-09-23",
+                "reward": 100,
+                "status": "locked"
+              },
+              {
+                "day": 4,
+                "date": "2026-09-24",
+                "reward": 100,
+                "status": "locked"
+              },
+              {
+                "day": 5,
+                "date": "2026-09-25",
+                "reward": 100,
+                "status": "locked"
+              },
+              {
+                "day": 6,
+                "date": "2026-09-26",
+                "reward": 100,
+                "status": "locked"
+              },
+              {
+                "day": 7,
+                "date": "2026-09-27",
+                "reward": 200,
+                "status": "locked"
+              }
+            ],
+            "consecutive_days": 2,
+            "today_day": 2,
+            "today_reward": 100
+          }
+        },
+        "result": "ok",
+        "v7code": 0
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://lingxi.kdocs.cn/api/public/v1/credits/balance",
+      "request_headers": {
+        "Cookie": "wps_sid=V02S...(masked)",
+        "Referer": "https://lingxi.kdocs.cn/",
+        "Origin": "https://lingxi.kdocs.cn",
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36"
+      },
+      "request_body": null,
+      "status": 200,
+      "response_headers": {
+        "Date": "Tue, 22 Sep 2026 05:37:03 GMT",
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Length": "1279",
+        "Connection": "close",
+        "Vary": "Accept-Encoding",
+        "access-control-allow-credentials": "true",
+        "access-control-allow-headers": "content-type,x-cc-region,x-csrftoken,ai-gateway-product-name,x-request-id,Aigc-Gateway-SecText-Scene,accept,ai-gateway-intention-code,Aigc-Gateway-SecText-From,x-user-query,ai-gateway-uid,x-client-version,x-user-token,x-region,x-cc-entrance,x-csrf-rand,x-client-channel,accept-language,Aigc-Gateway-Product-Name,client-request-id,Aigc-Gateway-Intention-Code,x-pop-token,x-server-id,x-client-request-id,x-requested-with,accept-encoding,x-client-type,x-device-id,X-Cc-Open-Position,x-biz-type,content-encoding,x-endpoint-id,x-action-id,x-cc-version,x-encryption-algorithm,x-encryption-param,x-encryption-app-key,x-encryption-id,x-cc-component,x-open-position, x-custom-aidesign-mode, x-custom-aidesign-alg-mode, x-custom-client-type, x-custom-client-version, x-custom-client-channel, x-custom-client-language, x-custom-user-hash,x-custom-aidesign-mode, x-custom-aidesign-alg-mode, x-custom-client-type, x-custom-client-version, x-custom-client-channel, x-custom-client-language, x-custom-user-hash",
+        "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "access-control-allow-origin": "https://lingxi.kdocs.cn",
+        "access-control-expose-headers": "content-type,x-cc-region,x-csrftoken,ai-gateway-product-name,x-request-id,Aigc-Gateway-SecText-Scene,accept,ai-gateway-intention-code,Aigc-Gateway-SecText-From,x-user-query,ai-gateway-uid,x-client-version,x-user-token,x-region,x-cc-entrance,x-csrf-rand,x-client-channel,accept-language,Aigc-Gateway-Product-Name,client-request-id,Aigc-Gateway-Intention-Code,x-pop-token,x-server-id,x-client-request-id,x-requested-with,accept-encoding,x-client-type,x-device-id,X-Cc-Open-Position,x-biz-type,content-encoding,x-endpoint-id,x-action-id,x-cc-version, x-custom-aidesign-mode, x-custom-aidesign-alg-mode, x-custom-client-type, x-custom-client-version, x-custom-client-channel, x-custom-client-language, x-custom-user-hash,x-custom-aidesign-mode, x-custom-aidesign-alg-mode, x-custom-client-type, x-custom-client-version, x-custom-client-channel, x-custom-client-language, x-custom-user-hash",
+        "x-region": "default",
+        "x-request-id": "bec938e62e732af455ee63a6575b3d3a",
+        "x-trace-id": "bec938e62e732af455ee63a6575b3d3a",
+        "x-envoy-upstream-service-time": "15",
+        "X-KLB": "2",
+        "Server": "elb"
+      },
+      "response_body": {
+        "data": {
+          "enabled": true,
+          "bonus_credits": [
+            {
+              "balance": 800,
+              "value": 800,
+              "consumed": 0,
+              "expire_time": "2026-10-22T19:30:44+08:00",
+              "effect_time": "2026-09-21T19:30:44+08:00",
+              "sku_key": "ai_credits_grant"
+            },
+            {
+              "balance": 100,
+              "value": 100,
+              "consumed": 0,
+              "expire_time": "2026-10-22T19:31:12+08:00",
+              "effect_time": "2026-09-21T19:31:12+08:00",
+              "sku_key": "ai_credits_grant"
+            },
+            {
+              "balance": 100,
+              "value": 100,
+              "consumed": 0,
+              "expire_time": "2026-10-23T08:00:09+08:00",
+              "effect_time": "2026-09-22T08:00:09+08:00",
+              "sku_key": "ai_credits_grant"
+            }
+          ],
+          "purchased_credits": [],
+          "total_bonus": 1000,
+          "total_purchased": 0,
+          "total_contract": 0,
+          "total_balance": 1000,
+          "extra_grant_status": "",
+          "bonus_summary": {
+            "total_value": 1000,
+            "total_consumed": 0,
+            "items": [
+              {
+                "balance": 800,
+                "value": 800,
+                "consumed": 0,
+                "expire_time": "2026-10-22T19:30:44+08:00",
+                "effect_time": "2026-09-21T19:30:44+08:00",
+                "sku_key": "ai_credits_grant"
+              },
+              {
+                "balance": 100,
+                "value": 100,
+                "consumed": 0,
+                "expire_time": "2026-10-22T19:31:12+08:00",
+                "effect_time": "2026-09-21T19:31:12+08:00",
+                "sku_key": "ai_credits_grant"
+              },
+              {
+                "balance": 100,
+                "value": 100,
+                "consumed": 0,
+                "expire_time": "2026-10-23T08:00:09+08:00",
+                "effect_time": "2026-09-22T08:00:09+08:00",
+                "sku_key": "ai_credits_grant"
+              }
+            ]
+          },
+          "purchased_summary": {
+            "total_value": 0,
+            "total_consumed": 0,
+            "items": []
+          },
+          "active_subscription": null
+        },
+        "result": "ok",
+        "v7code": 0
+      }
+    }
+  ]
+}
