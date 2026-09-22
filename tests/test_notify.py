@@ -120,7 +120,7 @@ def test_textcard_line_shows_balance_and_streak(adapters_registered):
                                             balance='2592', streak=3)),
     ], '2026-09-22')
     d = msg['textcard']['description']
-    assert '🟢 WPS 灵犀 +100 积分｜余2592｜连3天' in d
+    assert '🟢 WPS 灵犀 +100｜余2592｜连3天' in d
 
 
 def test_textcard_omits_absent_extras(adapters_registered):
@@ -139,3 +139,17 @@ def test_textcard_busy_line_shows_reason_not_signed(adapters_registered):
     ], '2026-09-22')
     d = msg['textcard']['description']
     assert '今日未发放' in d and '已签到' not in d
+
+
+def test_textcard_lines_fit_one_row(adapters_registered):
+    from app.notify import build_textcard
+    msg = build_textcard([
+        CheckinOutcome('minimax', CheckinResult('ok', '成功', '+400 积分',
+                                                balance='2262', streak=4)),
+        CheckinOutcome('qoder', CheckinResult('ok', '成功', '+100 Credits')),
+    ], '2026-09-22')
+    d = msg['textcard']['description']
+    assert '🟣 MiniMax +400｜余2262｜连4天' in d   # 短名+去"积分"
+    assert '⚫ Qoder +100Cr' in d                  # Credits→Cr
+    for line in d.split(chr(10)):
+        assert len(line) <= 26                     # 手机单行预算

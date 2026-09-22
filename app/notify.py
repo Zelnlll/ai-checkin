@@ -20,6 +20,15 @@ def _dot(o: CheckinOutcome) -> str:
     return '🔴' if o.result.state == 'error' else _PLATFORM_DOT.get(o.platform, '⚪')
 
 
+_SHORT_TITLES = {'MiniMax Code': 'MiniMax'}
+
+
+def _compact(text: str) -> str:
+    for word in (' 积分', ' 魔粒', '积分', '魔粒'):
+        text = text.replace(word, '')
+    return text.replace('Credits', 'Cr').strip()
+
+
 def _title(o: CheckinOutcome) -> str:
     try:
         return get_adapter(o.platform).title
@@ -50,12 +59,14 @@ def build_textcard(outcomes: list[CheckinOutcome], today: str) -> dict[str, Any]
     for o in outcomes:
         r = o.result
         detail = r.reward or (r.message if r.state in ('error', 'busy') else '已签到')
+        detail = _compact(detail)
+        name = _SHORT_TITLES.get(_title(o), _title(o))
         extras = []
         if r.balance:
             extras.append(f'余{r.balance}')
         if r.streak >= 2:
             extras.append(f'连{r.streak}天')
-        text = f'{_dot(o)} {_title(o)} {detail}'
+        text = f'{_dot(o)} {name} {detail}'
         if extras:
             text += '｜' + '｜'.join(extras)
         lines.append(text[:40])
