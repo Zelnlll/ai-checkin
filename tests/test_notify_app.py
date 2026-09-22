@@ -56,8 +56,8 @@ def test_push_sends_card_with_agentid_and_touser(server, cfg, outcomes):
     body = sent_bodies(server)[0]
     assert body['agentid'] == 1000002
     assert body['touser'] == 'zhangsan'
-    assert body['msgtype'] == 'markdown'
-    assert 'WPS 灵犀' in body['markdown']['content']
+    assert body['msgtype'] == 'textcard'
+    assert 'WPS 灵犀' in body['textcard']['description']
 
 
 def test_token_cached_between_pushes(server, cfg, outcomes):
@@ -116,54 +116,17 @@ def test_custom_api_base_from_config_is_used(local_server, tmp_path, outcomes, m
                for x in local_server.received)
 
 
-class _ImgCtx:
-    """记录调用顺序的假 render/upload/post。"""
 
-    def __init__(self, render_fail=False, upload_fail=False):
-        self.calls = []
-        self.render_fail = render_fail
-        self.upload_fail = upload_fail
 
-    def render(self, html):
-        self.calls.append('render')
-        if self.render_fail:
-            raise RuntimeError('no browser')
-        assert '签到中心' in html
-        return b'PNGBYTES'
+def test_textcard_rejected_falls_back_to_plain_text(server, cfg, outcomes):
+    calls = []
 
-    def upload(self, base, token, png):
-        self.calls.append('upload')
-        if self.upload_fail:
-            raise RuntimeError('upload 500')
-        assert png == b'PNGBYTES'
-        return 'MEDIA-ID-1'
-
-    def post(self, method, url, headers, body=None, **kw):
-        self.calls.append(('send', body))
+    def post(method, url, headers, body=None, **kw):
+        calls.append(body['msgtype'])
+        if body['msgtype'] == 'textcard':
+            return {'errcode': 40008, 'errmsg': 'invalid msgtype'}
         return {'errcode': 0}
 
-
-def test_image_message_sent_when_render_ok(server, cfg, outcomes):
-    ctx = _ImgCtx()
-    n = WeComAppNotifier(cfg, post=ctx.post, render=ctx.render, upload=ctx.upload)
+    n = WeComAppNotifier(cfg, post=post)
     assert n.push(outcomes, '2026-09-22') is True
-    assert ctx.calls[:2] == ['render', 'upload']
-    body = ctx.calls[2][1]
-    assert body['msgtype'] == 'image' and body['image']['media_id'] == 'MEDIA-ID-1'
-    assert body['touser'] == 'zhangsan'
-
-
-def test_render_failure_falls_back_to_markdown(server, cfg, outcomes):
-    ctx = _ImgCtx(render_fail=True)
-    n = WeComAppNotifier(cfg, post=ctx.post, render=ctx.render, upload=ctx.upload)
-    assert n.push(outcomes, '2026-09-22') is True
-    body = ctx.calls[-1][1]
-    assert body['msgtype'] == 'markdown'
-
-
-def test_upload_failure_falls_back_to_markdown(server, cfg, outcomes):
-    ctx = _ImgCtx(upload_fail=True)
-    n = WeComAppNotifier(cfg, post=ctx.post, render=ctx.render, upload=ctx.upload)
-    assert n.push(outcomes, '2026-09-22') is True
-    body = ctx.calls[-1][1]
-    assert body['msgtype'] == 'markdown'
+    assert calls == ['textcard', 'text']

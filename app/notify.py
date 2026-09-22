@@ -1,4 +1,4 @@
-"""企业微信群机器人通知：text_notice 汇总卡片，推送失败绝不影响签到主流程。"""
+"""企业微信群机器人通知（纯文本兜底格式）；推送失败绝不影响签到主流程。"""
 
 from __future__ import annotations
 
@@ -15,40 +15,56 @@ logger = logging.getLogger(__name__)
 _STATE_ICON = {'ok': '✅', 'already': '✔', 'busy': '⏳', 'error': '❌'}
 
 
-def _row_title(outcome: CheckinOutcome) -> str:
+def _title(o: CheckinOutcome) -> str:
     try:
-        title = get_adapter(outcome.platform).title
+        return get_adapter(o.platform).title
     except KeyError:
-        title = outcome.platform
-    icon = _STATE_ICON.get(outcome.result.state, '❓')
-    return f'{icon} **{title}**'
+        return o.platform
 
 
-def _row_desc(outcome: CheckinOutcome) -> str:
-    r = outcome.result
-    if r.state == 'error':
-        return f'<font color="warning">{r.message[:60]}</font>'
-    if r.state == 'busy':
-        return f'<font color="comment">{r.message[:60]}</font>'
-    return r.reward or r.message[:60]
-
-
-def build_markdown(outcomes: list[CheckinOutcome], today: str) -> dict[str, Any]:
+def build_text(outcomes: list[CheckinOutcome], today: str) -> dict[str, Any]:
+    """纯文本兜底：微信插件保证可见，无任何标签。"""
     failed = [o for o in outcomes if o.result.state == 'error']
-    done_count = sum(1 for o in outcomes if o.result.done())
-    n = len(outcomes)
-    if failed:
-        head = f'**{today} · <font color="warning">有失败 {done_count}/{n}</font>**'
-    else:
-        head = f'**{today} · <font color="info">全部成功 {done_count}/{n}</font>**'
-    lines = ['# 📋 AI 平台签到', head, '']
-    rewards = [o.result.reward for o in outcomes if o.result.reward]
-    if rewards:
-        lines.append(f'> 战利品：{" · ".join(rewards)}')
-        lines.append('')
+    done = sum(1 for o in outcomes if o.result.done())
+    head = (f'📋 每日签到 {today} · '
+            + (f'有失败 {done}/{len(outcomes)}' if failed else f'全部成功 {done}/{len(outcomes)}'))
+    lines = [head]
     for o in outcomes:
-        lines.append(f'{_row_title(o)}　{_row_desc(o)}')
-    return {'msgtype': 'markdown', 'markdown': {'content': chr(10).join(lines)}}
+        icon = _STATE_ICON.get(o.result.state, '❓')
+        detail = o.result.reward or o.result.message
+        lines.append(f'{icon} {_title(o)} {detail}'[:60])
+    return {'msgtype': 'text', 'text': {'content': chr(10).join(lines)}}
+
+
+def build_textcard(outcomes: list[CheckinOutcome], today: str) -> dict[str, Any]:
+    """textcard=微信插件支持的大标题+小字明细格式，奖励绿色高亮。"""
+    failed = [o for o in outcomes if o.result.state == 'error']
+    done = sum(1 for o in outcomes if o.result.done())
+    n = len(outcomes)
+    head = f'全部成功 {done}/{n}' if not failed else f'有失败 {done}/{n}'
+    lines = [f'<div class="gray">{today}</div>']
+    for o in outcomes:
+        try:
+            title = get_adapter(o.platform).title
+        except KeyError:
+            title = o.platform
+        icon = _STATE_ICON.get(o.result.state, '❓')
+        r = o.result
+        if r.reward:
+            lines.append(f'{icon} {title}　<span class="highlighted">{r.reward}</span>')
+        elif r.state == 'error':
+            lines.append(f'{icon} {title}<div class="gray">{r.message[:30]}</div>')
+        else:
+            lines.append(f'{icon} {title}　{r.message[:20]}')
+    rows = lines[:]
+    while len(chr(10).join(rows).encode('utf-8')) > 500 and len(rows) > 2:
+        rows.pop()
+    desc = chr(10).join(rows)
+    return {'msgtype': 'textcard', 'textcard': {
+        'title': f'📋 {head}',
+        'description': desc,
+        'url': 'https://work.weixin.qq.com',
+    }}
 
 
 class WeComNotifier:
@@ -61,7 +77,7 @@ class WeComNotifier:
         if not self._webhook:
             logger.warning('WECOM_WEBHOOK 未配置，跳过推送')
             return False
-        payload = build_markdown(outcomes, today)
+        payload = build_text(outcomes, today)
         try:
             resp = self._post('POST', self._webhook, {}, body=payload)
         except Exception as exc:

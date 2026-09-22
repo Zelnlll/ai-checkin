@@ -1,6 +1,6 @@
 import pytest
 
-from app.notify import WeComNotifier, build_markdown
+from app.notify import WeComNotifier
 from app.platforms import ADAPTERS
 from app.platforms.base import Adapter, CheckinResult
 from app.scheduler import CheckinOutcome
@@ -37,50 +37,18 @@ def adapters_registered():
             ADAPTERS.pop(k, None)
 
 
-def test_all_success_structure(adapters_registered):
-    msg = build_markdown([
+def test_build_text_plain_lines(adapters_registered):
+    from app.notify import build_text
+    msg = build_text([
         CheckinOutcome('wps', CheckinResult('ok', '签到成功', '+100 积分')),
-        CheckinOutcome('qoder', CheckinResult('already', '今日活动已领取', '+100 Credits')),
+        CheckinOutcome('qoder', CheckinResult('error', 'HTTP 401 token 失效')),
     ], '2026-09-22')
-    assert msg['msgtype'] == 'markdown'
-    c = msg['markdown']['content']
-    assert c.startswith('# 📋 AI 平台签到')
-    assert '2026-09-22' in c
-    assert '全部成功 2/2' in c
-    assert '战利品' in c and '+100 积分' in c and '+100 Credits' in c
-    assert '✅ **WPS 灵犀**' in c
-    assert '✔ **Qoder**' in c
-
-
-def test_failure_shows_warning_color(adapters_registered):
-    msg = build_markdown([
-        CheckinOutcome('wps', CheckinResult('error', 'Cookie 失效，请重新导入')),
-        CheckinOutcome('qoder', CheckinResult('ok', '成功', '+100 Credits')),
-    ], '2026-09-22')
-    c = msg['markdown']['content']
-    assert '有失败 1/2' in c and '<font color="warning">' in c
-    assert '❌ **Qoder**' not in c and '❌ **WPS 灵犀**' in c
-    assert 'Cookie 失效' in c
-
-
-def test_no_reward_line(adapters_registered):
-    c = build_markdown([
-        CheckinOutcome('wps', CheckinResult('already', '今日已签到')),
-    ], '2026-09-22')['markdown']['content']
-    assert '战利品' not in c
-
-
-def test_push_posts_markdown_payload():
-    sent = []
-
-    def fake_post(method, url, headers, body=None, **kw):
-        sent.append(body)
-        return {'errcode': 0}
-
-    n = WeComNotifier('https://x', post=fake_post)
-    ok = n.push([CheckinOutcome('wps', CheckinResult('ok', '成功'))], '2026-09-22')
-    assert ok is True
-    assert sent[0]['msgtype'] == 'markdown'
+    assert msg['msgtype'] == 'text'
+    c = msg['text']['content']
+    assert '每日签到 2026-09-22' in c
+    assert '✅ WPS 灵犀 +100 积分' in c
+    assert '❌ Qoder HTTP 401 token 失效' in c
+    assert '<' not in c          # 纯文本无任何标签
 
 
 def test_push_swallows_webhook_errors():
@@ -94,3 +62,39 @@ def test_push_swallows_webhook_errors():
 def test_empty_webhook_skips_push():
     n = WeComNotifier('', post=lambda *a, **k: {'errcode': 0})
     assert n.push([], '2026-09-22') is False
+
+
+def test_textcard_big_title_and_small_rows(adapters_registered):
+    from app.notify import build_textcard
+    msg = build_textcard([
+        CheckinOutcome('wps', CheckinResult('ok', '签到成功', '+100 积分')),
+        CheckinOutcome('qoder', CheckinResult('already', '今日活动已领取', '+100 Credits')),
+    ], '2026-09-22')
+    assert msg['msgtype'] == 'textcard'
+    tc = msg['textcard']
+    assert tc['title'] == '📋 全部成功 2/2'
+    assert tc['url'].startswith('http')
+    assert '2026-09-22' in tc['description']
+    assert '✅ WPS 灵犀' in tc['description']
+    assert '<span class="highlighted">+100 积分</span>' in tc['description']
+
+
+def test_textcard_failure_title_red_mark(adapters_registered):
+    from app.notify import build_textcard
+    msg = build_textcard([
+        CheckinOutcome('wps', CheckinResult('error', 'Cookie 失效，请重新导入')),
+    ], '2026-09-22')
+    tc = msg['textcard']
+    assert '有失败 0/1' in tc['title']
+    assert '❌ WPS 灵犀' in tc['description']
+    assert 'Cookie 失效' in tc['description']
+
+
+def test_textcard_description_under_512_bytes(adapters_registered):
+    from app.notify import build_textcard
+    long_msg = '失' * 200
+    msg = build_textcard([
+        CheckinOutcome(p, CheckinResult('error', long_msg))
+        for p in ('wps', 'qoder', 'dazi', 'minimax', 'modelscope')
+    ], '2026-09-22')
+    assert len(msg['textcard']['description'].encode('utf-8')) <= 512
