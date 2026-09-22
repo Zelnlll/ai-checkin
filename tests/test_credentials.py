@@ -11,8 +11,8 @@ def make_store(tmp_path):
 
 
 def test_inbox_import_writes_credential_and_renames_source(tmp_path):
-    (tmp_path / 'inbox' / 'wps.json').write_text('{"cookie": "kso_sid=abc"}', encoding='utf-8')
     store = make_store(tmp_path)
+    (tmp_path / 'inbox' / 'wps.json').write_text('{"cookie": "kso_sid=abc"}', encoding='utf-8')
     assert store.import_inbox() == [('wps', 'wps.json')]
     assert store.load('wps')['cookie'] == 'kso_sid=abc'
     assert not (tmp_path / 'inbox' / 'wps.json').exists()
@@ -28,15 +28,15 @@ def test_corrupt_inbox_file_skipped_without_touching_existing(tmp_path):
 
 
 def test_unknown_platform_inbox_file_ignored(tmp_path):
-    (tmp_path / 'inbox' / 'wechat.json').write_text('{"token": "x"}', encoding='utf-8')
     store = make_store(tmp_path)
+    (tmp_path / 'inbox' / 'wechat.json').write_text('{"token": "x"}', encoding='utf-8')
     assert store.import_inbox() == []
     assert store.load('wechat') is None
 
 
 def test_inbox_file_missing_credential_field_rejected(tmp_path):
-    (tmp_path / 'inbox' / 'wps.json').write_text('{"note": "没有凭证字段"}', encoding='utf-8')
     store = make_store(tmp_path)
+    (tmp_path / 'inbox' / 'wps.json').write_text('{"note": "没有凭证字段"}', encoding='utf-8')
     assert store.import_inbox() == []
     assert store.load('wps') is None
 
