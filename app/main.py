@@ -36,6 +36,11 @@ def _default_runner(cfg: Config):
     return runner
 
 
+def choose_notifier(cfg: Config):
+    from app.notify_app import make_notifier
+    return make_notifier(cfg)
+
+
 def cmd_run_once(cfg: Config, *, platforms: list[str] | None = None,
                  store: CredentialStore | None = None,
                  state: DailyState | None = None,
@@ -44,7 +49,7 @@ def cmd_run_once(cfg: Config, *, platforms: list[str] | None = None,
     platforms = platforms or list(ADAPTERS)
     store = store or CredentialStore(cfg.data_dir, set(ADAPTERS))
     state = state or DailyState(cfg.data_dir)
-    notifier = notifier or WeComNotifier(cfg.wecom_webhook)
+    notifier = notifier or choose_notifier(cfg)
     runner_fn = runner_fn or _default_runner(cfg)
     imported = store.import_inbox()
     if imported:

@@ -12,6 +12,9 @@
 - **请求日志**：每次尝试追加 `data/logs/requests.log`（JSON 行）。
 - **通知**：企微 `template_card`（text_notice）汇总卡：平台、日期、
   ✅成功/✔已签到/❌失败、奖励数值、失败原因；有失败时卡片标红。
+  双通道：**群机器人 Webhook**（`WECOM_WEBHOOK`）或**自建应用**
+  （`WECOM_CORP_ID/SECRET/AGENT_ID` + `WECOM_TO_USER`/`WECOM_CHAT_ID`，
+  access_token 自动缓存与失效刷新；应用通道配置齐全时优先）。
 - **凭证过期检测**：JWT 类（Qoder/MiniMax）按 exp 精确判定；Cookie 类按导入时间估算 30 天临期提醒。
 
 ## 快速开始（飞牛 NAS / 任意 Docker 主机）

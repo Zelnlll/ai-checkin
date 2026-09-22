@@ -88,3 +88,14 @@ def test_run_once_skips_done_platform_without_request(cfg, stub_registered):
                             runner_fn=lambda *a: called.append(a))
     assert called == []
     assert outcomes[0].result.state == 'already'
+
+
+def test_run_once_selects_app_notifier_when_corpid_configured(cfg, stub_registered, monkeypatch):
+    from app.notify_app import WeComAppNotifier
+    from app.notify import WeComNotifier
+    from app.main import choose_notifier
+    app_cfg = Config(cfg.checkin_time, cfg.retry_times, '', cfg.data_dir,
+                     wecom_corp_id='ww', wecom_corp_secret='s', wecom_agent_id=1,
+                     wecom_to_user='u')
+    assert isinstance(choose_notifier(app_cfg), WeComAppNotifier)
+    assert isinstance(choose_notifier(cfg), WeComNotifier)   # 无 corpid → 群机器人

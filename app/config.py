@@ -17,6 +17,11 @@ class Config:
     retry_times: int
     wecom_webhook: str
     data_dir: Path
+    wecom_corp_id: str = ''
+    wecom_corp_secret: str = ''
+    wecom_agent_id: int = 0
+    wecom_to_user: str = ''
+    wecom_chat_id: str = ''
 
 
 def _parse_checkin_time(raw: str) -> tuple[int, int]:
@@ -27,6 +32,11 @@ def _parse_checkin_time(raw: str) -> tuple[int, int]:
     if hh > 23 or mm > 59:
         return DEFAULT_CHECKIN_TIME
     return hh, mm
+
+
+def _parse_int(raw: str) -> int:
+    raw = raw.strip()
+    return int(raw) if raw.isdigit() else 0
 
 
 def load_config(env: dict[str, str] | None = None) -> Config:
@@ -42,4 +52,9 @@ def load_config(env: dict[str, str] | None = None) -> Config:
         retry_times=retry_times,
         wecom_webhook=source.get('WECOM_WEBHOOK', '').strip(),
         data_dir=Path(source.get('DATA_DIR', '/data')),
+        wecom_corp_id=source.get('WECOM_CORP_ID', '').strip(),
+        wecom_corp_secret=source.get('WECOM_CORP_SECRET', '').strip(),
+        wecom_agent_id=_parse_int(source.get('WECOM_AGENT_ID', '')),
+        wecom_to_user=source.get('WECOM_TO_USER', '').strip(),
+        wecom_chat_id=source.get('WECOM_CHAT_ID', '').strip(),
     )
