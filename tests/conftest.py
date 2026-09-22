@@ -25,8 +25,12 @@ class _Handler(BaseHTTPRequestHandler):
         else:
             status = route.get('status', 200)
             ctype = route.get('content_type', 'application/json')
-            payload = (route['raw'].encode('utf-8') if 'raw' in route
-                       else json.dumps(route.get('body')).encode('utf-8'))
+            if 'dynamic' in route:
+                payload = json.dumps(route['dynamic']()).encode('utf-8')
+            elif 'raw' in route:
+                payload = route['raw'].encode('utf-8')
+            else:
+                payload = json.dumps(route.get('body')).encode('utf-8')
         self.send_response(status)
         self.send_header('Content-Type', ctype)
         self.send_header('Content-Length', str(len(payload)))
@@ -52,9 +56,11 @@ class LocalServer:
         return self
 
     def route(self, method, path, body=None, raw=None, status=200,
-              content_type='application/json'):
+              content_type='application/json', dynamic=None):
         route = {'status': status, 'content_type': content_type}
-        if raw is not None:
+        if dynamic is not None:
+            route['dynamic'] = dynamic
+        elif raw is not None:
             route['raw'] = raw
         else:
             route['body'] = body
