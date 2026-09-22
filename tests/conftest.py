@@ -79,3 +79,31 @@ def local_server():
 def make_jwt(payload: dict) -> str:
     seg = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip('=')
     return f'header.{seg}.sig'
+
+
+class FakeStore:
+    """CredentialStore 替身：构造时给 {platform: creds}。"""
+
+    def __init__(self, creds: dict):
+        self._creds = dict(creds)
+
+    def load(self, platform):
+        return self._creds.get(platform)
+
+
+class FakeState:
+    """DailyState 替身：done=当天已完成平台集合。"""
+
+    def __init__(self, done: set[str] | None = None):
+        self._done = set(done or ())
+        self.marked: list = []
+
+    def done_today(self, platform):
+        return platform in self._done
+
+    def mark(self, platform, result, day):
+        self.marked.append((platform, result.state))
+
+
+class FakeConfig:
+    retry_times = 0
