@@ -65,3 +65,11 @@ def test_streak_from_yesterday_when_today_pending(tmp_path):
 
 def test_streak_zero_when_never(tmp_path):
     assert DailyState(tmp_path).streak('wps', '2026-09-22') == 0
+
+
+def test_mark_persists_balance_and_streak(tmp_path):
+    st = DailyState(tmp_path)
+    st.mark('wps', CheckinResult('ok', '成功', '+100', balance='2592', streak=3),
+            '2026-09-22')
+    rec = st.get('wps', '2026-09-22')
+    assert rec['balance'] == '2592' and rec['streak'] == 3

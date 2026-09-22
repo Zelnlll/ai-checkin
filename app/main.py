@@ -119,6 +119,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser('daemon')
     sub.add_parser('import')
     sub.add_parser('status')
+    p_web = sub.add_parser('web')
+    p_web.add_argument('--port', type=int, default=8000)
     p_login = sub.add_parser('login')
     p_login.add_argument('platform')
     p_login.add_argument('--headful', action='store_true')
@@ -135,6 +137,9 @@ def main(argv: list[str] | None = None) -> int:
         print(store.import_inbox() or 'inbox 无新凭证')
     elif args.command == 'status':
         cmd_status(cfg)
+    elif args.command == 'web':
+        from app.webapp import serve
+        serve(cfg, args.port)
     elif args.command == 'login':
         from app.browser_login import browser_login  # playwright 仅此处依赖
         return browser_login(cfg, args.platform, headful=args.headful)

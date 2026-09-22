@@ -38,6 +38,8 @@ class DailyState:
             'state': result.state,
             'message': result.message,
             'reward': result.reward,
+            'balance': result.balance,
+            'streak': result.streak,
             'at': dt.datetime.now().strftime('%H:%M:%S'),
         }
         self._save(data)
