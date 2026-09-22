@@ -41,5 +41,5 @@ def test_render_html_dashboard(tmp_path):
     assert '签到中心' in html
     assert '已签 2 / 5' in html
     assert 'WPS 灵犀' in html and '2592' in html
-    assert 'border-top-color' in html      # 每平台彩边卡片
+    assert 'class="icon"' in html        # 每平台图标色块
     assert '未导入凭证' in html             # qoder 卡片状态

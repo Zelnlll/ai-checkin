@@ -5,3 +5,4 @@ data/
 .env
 report_preview.png
 data_demo/
+panel_*.png
