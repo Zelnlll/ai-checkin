@@ -42,20 +42,12 @@ def build_textcard(outcomes: list[CheckinOutcome], today: str) -> dict[str, Any]
     done = sum(1 for o in outcomes if o.result.done())
     n = len(outcomes)
     head = f'全部成功 {done}/{n}' if not failed else f'有失败 {done}/{n}'
-    lines = [f'<div class="gray">{today}</div>']
+    lines = [today]
     for o in outcomes:
-        try:
-            title = get_adapter(o.platform).title
-        except KeyError:
-            title = o.platform
         icon = _STATE_ICON.get(o.result.state, '❓')
         r = o.result
-        if r.reward:
-            lines.append(f'{icon} {title}　<span class="highlighted">{r.reward}</span>')
-        elif r.state == 'error':
-            lines.append(f'{icon} {title}<div class="gray">{r.message[:30]}</div>')
-        else:
-            lines.append(f'{icon} {title}　{r.message[:20]}')
+        detail = r.reward or (r.message if r.state == 'error' else '已签到')
+        lines.append(f'{icon} {_title(o)} {detail}'[:40])
     rows = lines[:]
     while len(chr(10).join(rows).encode('utf-8')) > 500 and len(rows) > 2:
         rows.pop()

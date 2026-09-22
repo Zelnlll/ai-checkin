@@ -75,8 +75,8 @@ def test_textcard_big_title_and_small_rows(adapters_registered):
     assert tc['title'] == '📋 全部成功 2/2'
     assert tc['url'].startswith('http')
     assert '2026-09-22' in tc['description']
-    assert '✅ WPS 灵犀' in tc['description']
-    assert '<span class="highlighted">+100 积分</span>' in tc['description']
+    assert '✅ WPS 灵犀 +100 积分' in tc['description']
+    assert '<' not in tc['description']   # 微信插件不解析 HTML，必须纯文本
 
 
 def test_textcard_failure_title_red_mark(adapters_registered):
@@ -86,8 +86,8 @@ def test_textcard_failure_title_red_mark(adapters_registered):
     ], '2026-09-22')
     tc = msg['textcard']
     assert '有失败 0/1' in tc['title']
-    assert '❌ WPS 灵犀' in tc['description']
-    assert 'Cookie 失效' in tc['description']
+    assert '❌ WPS 灵犀 Cookie 失效' in tc['description']
+    assert '<' not in tc['description']
 
 
 def test_textcard_description_under_512_bytes(adapters_registered):
