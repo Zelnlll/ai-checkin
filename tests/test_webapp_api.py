@@ -258,3 +258,83 @@ def test_api_detail_unknown_platform(tmp_path):
             assert e.code == 404
     finally:
         httpd.shutdown()
+
+
+# ---------- 多账号 ----------
+
+def test_api_detail_groups_accounts(tmp_path, monkeypatch):
+    from app.platforms import get_adapter
+    def fake_bd(creds):
+        return [{'tag': '资源包', 'name': '包', 'amount': creds['token'] + '0',
+                 'expire': '7天后过期（10-01）'}]
+    monkeypatch.setattr(get_adapter('wps'), 'breakdown', fake_bd)
+    cfg = Config((10, 5), 3, '', tmp_path)
+    store = CredentialStore(tmp_path, {'wps'})
+    store.save('wps', {'token': 'a'})
+    store.upsert('wps', {'token': 'b', 'label': '小号'})
+    httpd, base = _start_server(cfg)
+    try:
+        resp = json.loads(_get(f'{base}/api/detail/wps'))
+        assert resp['ok'] and len(resp['accounts']) == 2
+        assert resp['accounts'][1]['label'] == '小号'
+        assert resp['accounts'][0]['rows'][0]['amount'] == 'a0'
+    finally:
+        httpd.shutdown()
+
+
+def test_post_credentials_upsert_by_id(tmp_path):
+    cfg = Config((10, 5), 3, '', tmp_path)
+    pre = CredentialStore(tmp_path, {'wps'})
+    pre.save('wps', {'cookie': 'a'})
+    pre.upsert('wps', {'cookie': 'b', 'label': '二'})
+    httpd, base = _start_server(cfg)
+    try:
+        resp = _post(f'{base}/api/credentials/wps',
+                     {'cookie': 'a2', 'id': 'main'})
+        assert resp['ok'] is True
+        accts = CredentialStore(tmp_path, {'wps'}).load_all('wps')
+        assert [a['cookie'] for a in accts] == ['a2', 'b']
+    finally:
+        httpd.shutdown()
+
+
+def test_post_credentials_add_new_account(tmp_path):
+    cfg = Config((10, 5), 3, '', tmp_path)
+    CredentialStore(tmp_path, {'wps'}).save('wps', {'cookie': 'a'})
+    httpd, base = _start_server(cfg)
+    try:
+        _post(f'{base}/api/credentials/wps', {'cookie': 'zz', 'label': '新号'})
+        accts = CredentialStore(tmp_path, {'wps'}).load_all('wps')
+        assert [a['cookie'] for a in accts] == ['a', 'zz']
+        assert accts[1]['label'] == '新号'
+    finally:
+        httpd.shutdown()
+
+
+def test_post_credentials_clear_one_account(tmp_path):
+    cfg = Config((10, 5), 3, '', tmp_path)
+    pre = CredentialStore(tmp_path, {'wps'})
+    pre.save('wps', {'cookie': 'a'})
+    b = pre.load_all('wps')
+    pre.upsert('wps', {'cookie': 'b'})
+    accts = pre.load_all('wps')
+    httpd, base = _start_server(cfg)
+    try:
+        _post(f'{base}/api/credentials/wps', {'clear': True, 'id': accts[1]['id']})
+        assert [a['cookie'] for a in
+                CredentialStore(tmp_path, {'wps'}).load_all('wps')] == ['a']
+    finally:
+        httpd.shutdown()
+
+
+def test_settings_page_lists_accounts(tmp_path):
+    cfg = Config((10, 5), 3, '', tmp_path)
+    store = CredentialStore(tmp_path, {'wps'})
+    store.save('wps', {'cookie': 'a'})
+    store.upsert('wps', {'cookie': 'b', 'label': '小号'})
+    httpd, base = _start_server(cfg)
+    try:
+        html = _get(f'{base}/settings')
+        assert '主账号' in html and '小号' in html and '添加账号' in html
+    finally:
+        httpd.shutdown()

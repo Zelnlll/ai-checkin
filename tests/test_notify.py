@@ -1,6 +1,8 @@
+import json
+
 import pytest
 
-from app.notify import WeComNotifier
+from app.notify import WeComNotifier, build_text
 from app.platforms import ADAPTERS
 from app.platforms.base import Adapter, CheckinResult
 from app.scheduler import CheckinOutcome
@@ -153,3 +155,15 @@ def test_textcard_lines_fit_one_row(adapters_registered):
     assert '🟡 Qoder +100' in d and 'Cr' not in d   # 单位全删
     for line in d.split(chr(10)):
         assert len(line) <= 26                     # 手机单行预算
+
+
+def test_notice_aggregated_multiaccount_failure_named():
+    from app.scheduler import CheckinOutcome
+    from app.platforms.base import CheckinResult as R
+    outcomes = [CheckinOutcome(
+        'wps',
+        R('error', '1/2 账号完成（小号：token失效）', '+100 积分', '1000'),
+        {'main': R('ok', '成', '+100 积分'), 'ab12': R('error', 'token失效')})]
+    payload = build_text(outcomes, '2026-09-23')
+    text = json.dumps(payload, ensure_ascii=False)
+    assert '小号：token失效' in text and '有失败' in text

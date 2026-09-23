@@ -107,3 +107,103 @@ def test_saved_at_refreshes_only_on_change(tmp_path):
     (tmp_path / 'inbox' / 'wps.json').write_text('{"cookie": "v2"}', encoding='utf-8')
     store.import_inbox()
     assert store.load('wps')['saved_at'] != '2020-01-01T00:00:00'   # 变了刷新，临期提醒可消除
+
+
+# ---------- 多账号 ----------
+
+def test_legacy_flat_file_loads_as_single_main(tmp_path):
+    (tmp_path / 'credentials').mkdir()
+    (tmp_path / 'credentials' / 'wps.json').write_text(
+        json.dumps({'cookie': 'old'}), encoding='utf-8')
+    store = CredentialStore(tmp_path, KNOWN)
+    assert store.load('wps')['cookie'] == 'old'
+    accts = store.load_all('wps')
+    assert len(accts) == 1 and accts[0]['id'] == 'main'
+
+
+def test_load_all_empty_returns_empty_list(tmp_path):
+    store = make_store(tmp_path)
+    assert store.load_all('wps') == []
+    assert store.load('wps') is None
+
+
+def test_save_keeps_single_main_account_format(tmp_path):
+    store = make_store(tmp_path)
+    store.save('wps', {'cookie': 'x'})
+    raw = json.loads((tmp_path / 'credentials' / 'wps.json').read_text(encoding='utf-8'))
+    assert raw['accounts'][0]['id'] == 'main'
+    assert store.load('wps')['cookie'] == 'x'
+
+
+def test_upsert_matching_credential_merges_in_place(tmp_path):
+    store = make_store(tmp_path)
+    store.save('wps', {'cookie': 'v1'})
+    store.upsert('wps', {'cookie': 'v1', 'csrf': 'c9'})
+    accts = store.load_all('wps')
+    assert len(accts) == 1 and accts[0]['csrf'] == 'c9'
+    store.upsert('wps', {'cookie': 'other'})       # 不匹配则视为新账号
+    assert len(store.load_all('wps')) == 2
+
+
+def test_upsert_explicit_id_targets_account(tmp_path):
+    store = make_store(tmp_path)
+    store.save('wps', {'cookie': 'a'})
+    store.upsert('wps', {'cookie': 'b', 'label': '二号'})
+    accts = store.load_all('wps')
+    assert len(accts) == 2 and accts[1]['label'] == '二号'
+    store.upsert('wps', {'cookie': 'b2'}, acct_id=accts[1]['id'])
+    accts = store.load_all('wps')
+    assert len(accts) == 2 and accts[1]['cookie'] == 'b2'
+    assert accts[1]['id'] and accts[1]['id'] != 'main'
+
+
+def test_upsert_second_credential_appends(tmp_path):
+    store = make_store(tmp_path)
+    store.save('minimax', {'token': 't1'})
+    store.upsert('minimax', {'token': 't2'})
+    assert [a['token'] for a in store.load_all('minimax')] == ['t1', 't2']
+
+
+def test_inbox_import_appends_second_account_when_multiple(tmp_path):
+    store = make_store(tmp_path)
+    store.save('minimax', {'token': 't1'})
+    store.upsert('minimax', {'token': 't2'})
+    (tmp_path / 'inbox' / 'minimax.json').write_text('{"token": "t3"}', encoding='utf-8')
+    store.import_inbox()
+    assert [a['token'] for a in store.load_all('minimax')] == ['t1', 't2', 't3']
+
+
+def test_inbox_import_rotates_single_account(tmp_path):
+    store = make_store(tmp_path)
+    store.save('minimax', {'token': 't1'})
+    (tmp_path / 'inbox' / 'minimax.json').write_text('{"token": '
+                                                     '"t1-rotated"}', encoding='utf-8')
+    store.import_inbox()
+    accts = store.load_all('minimax')
+    assert len(accts) == 1 and accts[0]['token'] == 't1-rotated'
+
+
+def test_remove_single_account_keeps_others(tmp_path):
+    store = make_store(tmp_path)
+    store.save('wps', {'cookie': 'a'})
+    store.upsert('wps', {'cookie': 'b'})
+    b = store.load_all('wps')[1]
+    store.remove('wps', acct_id=b['id'])
+    assert [a['cookie'] for a in store.load_all('wps')] == ['a']
+
+
+def test_remove_without_id_clears_all(tmp_path):
+    store = make_store(tmp_path)
+    store.save('wps', {'cookie': 'a'})
+    store.remove('wps')
+    assert store.load('wps') is None
+
+
+def test_upsert_sanitizes_label_and_illegal_id(tmp_path):
+    store = make_store(tmp_path)
+    store.upsert('wps', {'cookie': 'a', 'label': '主"><svg onload=x>'})
+    store.upsert('wps', {'cookie': 'b'}, acct_id='"><script>x</script>')
+    accts = store.load_all('wps')
+    assert '<' not in accts[0]['label'] and '"' not in accts[0]['label']
+    assert all(a['id'].isalnum() or set(a['id']) <= set('_-')
+               for a in accts)

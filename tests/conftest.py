@@ -88,19 +88,28 @@ def make_jwt(payload: dict) -> str:
 
 
 class FakeStore:
-    """CredentialStore 替身：构造时给 {platform: creds}。"""
+    """CredentialStore 替身：{platform: creds 或 [creds,…]}。"""
 
     def __init__(self, creds: dict):
         self._creds = dict(creds)
 
     def load(self, platform):
-        return self._creds.get(platform)
+        c = self._creds.get(platform)
+        if isinstance(c, list):
+            return c[0] if c else None
+        return c
+
+    def load_all(self, platform):
+        c = self._creds.get(platform)
+        if c is None:
+            return []
+        return c if isinstance(c, list) else [c]
 
 
 class FakeState:
-    """DailyState 替身：done=当天已完成平台集合。"""
+    """DailyState 替身：done=当天已完成 (platform,account) 集合。"""
 
-    def __init__(self, done: set[str] | None = None, streaks: dict | None = None,
+    def __init__(self, done: set | None = None, streaks: dict | None = None,
                  recs: dict | None = None):
         self._done = set(done or ())
         self._streaks = dict(streaks or {})
@@ -110,27 +119,46 @@ class FakeState:
         self.balances: list = []
         self.expirings: list = []
 
-    def done_today(self, platform):
-        return platform in self._done
+    @staticmethod
+    def _key(platform, account):
+        return platform if account in ('main', 'default') else f'{platform}#{account}'
 
-    def mark(self, platform, result, day):
-        self.marked.append((platform, result.state))
-        self.results.append((platform, result))
+    def _is_done(self, platform, account):
+        return (platform in self._done and account in ('main', 'default')) \
+            or (platform, account) in self._done
 
-    def set_balance(self, platform, day, balance):
-        self.balances.append((platform, balance))
+    def done_today(self, platform, account='main'):
+        return self._is_done(platform, account)
 
-    def set_expiring(self, platform, day, value):
-        self.expirings.append((platform, value))
+    def mark(self, platform, result, day, account='main'):
+        key = self._key(platform, account)
+        self.marked.append((key, result.state))
+        self.results.append((key, result))
 
-    def get(self, platform, day):
-        return self._recs.get((platform, day))
+    def set_balance(self, platform, day, balance, account='main'):
+        self.balances.append((self._key(platform, account), balance))
 
-    def streak(self, platform, day):
+    def set_expiring(self, platform, day, value, account='main'):
+        self.expirings.append((self._key(platform, account), value))
+
+    def get(self, platform, day, account='main'):
+        return self._recs.get((self._key(platform, account), day)) \
+            or self._recs.get((platform, day))
+
+    def recs(self, platform, day):
+        out = {}
+        for (key, d), rec in self._recs.items():
+            if d == day and key == platform:
+                out['main'] = rec
+            elif d == day and key.startswith(f'{platform}#'):
+                out[key.split('#', 1)[1]] = rec
+        return out
+
+    def streak(self, platform, day, account='main'):
         return self._streaks.get(platform, 0)
 
-    def touch_keepalive(self, platform, day):
-        self.marked.append((platform, 'keepalive'))
+    def touch_keepalive(self, platform, day, account='main'):
+        self.marked.append((self._key(platform, account), 'keepalive'))
 
 
 class FakeConfig:

@@ -1,4 +1,5 @@
 import datetime as dt
+import json
 
 from app.platforms.base import CheckinResult
 from app.state import DailyState
@@ -108,3 +109,46 @@ def test_set_expiring_merges_only_field(tmp_path):
     assert after['expiring'] == '1500 · 10-15到期'
     assert after['state'] == 'ok' and after['balance'] == '10'
     assert after['at'] == before['at']
+
+
+# ---------- 多账号 ----------
+
+def test_mark_per_account_and_legacy_main_key(tmp_path):
+    st = DailyState(tmp_path)
+    st.mark('wps', CheckinResult('ok', '主'), TODAY, account='main')
+    st.mark('wps', CheckinResult('error', '二号失败'), TODAY, account='ab12cd34')
+    raw = json.loads((tmp_path / 'state.json').read_text(encoding='utf-8'))
+    assert 'wps' in raw[TODAY] and 'wps#ab12cd34' in raw[TODAY]   # main 用原键
+    assert st.get('wps', TODAY)['state'] == 'ok'
+    assert st.get('wps', TODAY, account='ab12cd34')['state'] == 'error'
+    assert st.done_today('wps') is True       # done_today 默认看 main
+
+
+def test_recs_lists_all_accounts(tmp_path):
+    st = DailyState(tmp_path)
+    st.mark('wps', CheckinResult('ok', '主'), TODAY)
+    st.mark('wps', CheckinResult('ok', '二'), TODAY, account='x2')
+    recs = st.recs('wps', TODAY)
+    assert set(recs) == {'main', 'x2'}
+    assert recs['x2']['message'] == '二'
+
+
+def test_set_balance_and_expiring_per_account(tmp_path):
+    st = DailyState(tmp_path)
+    st.mark('wps', CheckinResult('ok', 'm'), TODAY)
+    st.mark('wps', CheckinResult('ok', 'm2'), TODAY, account='x2')
+    st.set_balance('wps', TODAY, '999', account='x2')
+    st.set_expiring('wps', TODAY, '50 · 10-01到期', account='x2')
+    assert st.get('wps', TODAY, account='x2')['balance'] == '999'
+    assert st.get('wps', TODAY, account='x2')['expiring'] == '50 · 10-01到期'
+    assert not st.get('wps', TODAY).get('balance')
+
+
+def test_streak_per_account(tmp_path):
+    st = DailyState(tmp_path)
+    y = (dt.date.fromisoformat(TODAY) - dt.timedelta(days=1)).isoformat()
+    st.mark('wps', CheckinResult('ok', 'm'), y)
+    st.mark('wps', CheckinResult('ok', 'm'), TODAY)
+    st.mark('wps', CheckinResult('ok', 'm2'), TODAY, account='x2')
+    assert st.streak('wps', TODAY) == 2
+    assert st.streak('wps', TODAY, account='x2') == 1

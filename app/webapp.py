@@ -9,13 +9,16 @@
 from __future__ import annotations
 
 import datetime as dt
+import html as html_mod
 import json
+import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 from app import __version__
-from app.credentials import CredentialStore
+from app.credentials import CredentialStore, sanitize_acct_id, sanitize_label
 from app.platforms import ADAPTERS, get_adapter
+from app.scheduler import fmt_num, parse_num
 from app.scanner import scan_local_accounts
 from app.state import DailyState
 
@@ -59,6 +62,66 @@ def _last_done(state: DailyState, platform: str, today: str) -> str:
     return ''
 
 
+def _acct_key(acct: dict[str, Any], index: int) -> str:
+    return str(acct.get('id') or ('main' if index == 0 else f'acct{index + 1}'))
+
+
+def _acct_label(acct: dict[str, Any], index: int) -> str:
+    return str(acct.get('label') or ('主账号' if index == 0 else f'账号{index + 1}'))
+
+
+def _sum_field(vals: list[str], prefix: str = '') -> str:
+    nums = [n for n in (parse_num(v) for v in vals if v) if n is not None]
+    return f'{prefix}{fmt_num(sum(nums))}' if nums else ''
+
+
+def _earliest_expiring(vals: list[str]) -> str:
+    def day(e: str) -> str:
+        m = re.search(r'·\s*([\d-]+)到期', e)
+        return m.group(1) if m else '9999'
+    got = [e for e in vals if e]
+    return min(got, key=day) if got else ''
+
+
+def _aggregate_recs(recs: dict[str, dict], order: list[tuple[str, str]]) -> dict:
+    """order: [(acct_id, label)] 凭证序 → 聚合展示字段（单账号原样透传）。"""
+    seq = [(aid, label, recs[aid]) for aid, label in order if aid in recs]
+    seq += [(aid, aid, rec) for aid, rec in recs.items()
+            if aid not in {a for a, _, _ in seq}]
+    if not seq:
+        return {}
+    if len(seq) == 1:
+        return {**seq[0][2], 'account_note': ''}
+    states = [r.get('state', '') for _, _, r in seq]
+    if all(s in ('ok', 'already') for s in states):
+        state = 'ok' if any(s == 'ok' for s in states) else 'already'
+    elif any(s == 'error' for s in states):
+        state = 'error'
+    else:
+        state = 'busy'
+    n = len(seq)
+    n_ok = sum(1 for s in states if s in ('ok', 'already'))
+    word = ('全部完成' if all(s in ('ok', 'already') for s in states)
+            else '部分失败' if any(s == 'error' for s in states) else '待重试')
+    fails = [f'{label}：{r.get("message", "")}'
+             for _, label, r in seq if r.get('state') == 'error']
+    message = (f'{n_ok}/{n} 账号{word}'
+               + (f'（{"；".join(fails)[:100]}）' if fails else ''))
+    main_rec = next((r for a, _, r in seq if a == 'main'), seq[0][2])
+    return {
+        'state': state, 'message': message,
+        'reward': _sum_field([r.get('reward', '') for _, _, r in seq], '+')
+                  + (' 积分' if any('积分' in r.get('reward', '')
+                                    for _, _, r in seq) else ''),
+        'balance': _sum_field([r.get('balance', '') for _, _, r in seq]),
+        'expiring': _earliest_expiring([r.get('expiring', '') for _, _, r in seq]),
+        'streak': main_rec.get('streak', 0),
+        'keepalive': min((r.get('keepalive', '') for _, _, r in seq), default=''),
+        'at': max((r.get('at', '') for _, _, r in seq), default=''),
+        'account_note': f'{n} 账号',
+    }
+
+
 def collect_status(cfg, store: CredentialStore, state: DailyState,
                    platforms: list[str]) -> dict[str, Any]:
     today = dt.date.today().isoformat()
@@ -66,21 +129,34 @@ def collect_status(cfg, store: CredentialStore, state: DailyState,
     done = 0
     for platform in platforms:
         adapter = get_adapter(platform)
-        rec = state.get(platform, today) or {}
+        accounts = store.load_all(platform)
+        order = [(_acct_key(a, i), _acct_label(a, i))
+                 for i, a in enumerate(accounts)]
+        recs = state.recs(platform, today)
+        if order:      # 有凭证才按 id 集过滤，剔除已删账号的幽灵记录
+            valid = {aid for aid, _ in order}
+            recs = {k: v for k, v in recs.items() if k in valid}
+        rec = _aggregate_recs(recs, order)
         if rec.get('state') in ('ok', 'already'):
             done += 1
-        creds = store.load(platform)
-        credential = '已导入' if creds else '未导入凭证'
-        if creds:
-            report = store.expiry_report(platform, creds, adapter)
-            if report.get('expired') or report.get('likely_expired_soon'):
-                credential = '凭证临期/失效 ⚠'
+        credential = '已导入' if accounts else '未导入凭证'
+        if accounts:
+            if len(accounts) > 1:
+                credential = f'已导入·{len(accounts)}号'
+            for acct in accounts:
+                report = store.expiry_report(platform, acct, adapter)
+                if report.get('expired') or report.get('likely_expired_soon'):
+                    credential = '凭证临期/失效 ⚠'
+                    break
         items.append({
             'platform': platform, 'title': adapter.title,
             'state': rec.get('state', ''), 'message': rec.get('message', ''),
             'reward': rec.get('reward', ''), 'balance': rec.get('balance', ''),
             'streak': rec.get('streak', 0),
             'expiring': rec.get('expiring', ''),
+            'account_note': rec.get('account_note', ''),
+            'accounts': [{'id': aid, 'label': label, **recs.get(aid, {})}
+                         for aid, label in order],
             'keepalive': rec.get('keepalive', ''),
             'last_done': _last_done(state, platform, today),
             'credential': credential,
@@ -90,27 +166,40 @@ def collect_status(cfg, store: CredentialStore, state: DailyState,
 
 def collect_detail(store: CredentialStore, state: DailyState,
                    platform: str) -> dict[str, Any]:
-    """卡片详情：逐包积分+失效时间（官方提供时），否则回退说明。"""
+    """卡片详情：逐账号积分明细（官方提供时），否则回退说明。"""
     adapter = get_adapter(platform)
     today = dt.date.today().isoformat()
-    rec = state.get(platform, today) or {}
     out: dict[str, Any] = {
-        'ok': True, 'title': adapter.title, 'rows': [], 'note': '',
+        'ok': True, 'title': adapter.title, 'rows': [], 'note': '', 'accounts': [],
         'accent': _ACCENTS.get(platform, '#6b7280'),
-        'balance': rec.get('balance', ''), 'reward': rec.get('reward', '')}
-    creds = store.load(platform)
-    if not creds:
+        'balance': '', 'reward': ''}
+    accounts = store.load_all(platform)
+    if not accounts:
         out.update(ok=False, note='未导入凭证')
         return out
-    try:
-        rows = adapter.breakdown(creds)
-    except Exception as exc:                    # noqa: BLE001 —— 弹窗兜底
-        out.update(ok=False, note=f'查询失败：{type(exc).__name__} {str(exc)[:80]}')
-        return out
-    if rows is None:
-        out['note'] = '该平台官方接口不提供积分流水明细，余额见卡片'
-    else:
-        out['rows'] = rows
+    recs = state.recs(platform, today)
+    balances = []
+    for i, acct in enumerate(accounts):
+        aid = _acct_key(acct, i)
+        g: dict[str, Any] = {'id': aid, 'label': _acct_label(acct, i),
+                             'rows': [], 'note': ''}
+        try:
+            rows = adapter.breakdown(acct)
+            if rows is None:
+                g['note'] = '该平台官方接口不提供积分流水明细，余额见卡片'
+            else:
+                g['rows'] = rows
+        except Exception as exc:                    # noqa: BLE001 —— 弹窗兜底
+            g['note'] = f'查询失败：{type(exc).__name__} {str(exc)[:80]}'
+        bal = (recs.get(aid) or {}).get('balance', '')
+        if bal:
+            balances.append(bal)
+        out['accounts'].append(g)
+    if len(accounts) == 1:
+        out['rows'] = out['accounts'][0]['rows']
+        out['note'] = out['accounts'][0]['note']
+    nums = [n for n in (parse_num(b) for b in balances) if n is not None]
+    out['balance'] = fmt_num(sum(nums)) if nums else ''
     return out
 
 
@@ -131,13 +220,17 @@ def _rows(p: dict[str, Any]) -> str:
 def _card(p: dict[str, Any]) -> str:
     accent = _ACCENTS.get(p['platform'], '#6b7280')
     text, bg, fg = _PILL.get(p['state'], _PILL[''])
+    if p.get('account_note') and p['state'] in ('ok', 'already'):
+        text += f"·{p['account_note'].split()[0]}号"
     big = p['reward'] or {'busy': '待重试', 'error': '失败',
                           '': '未执行'}.get(p['state'], '已签到')
-    if p['credential'] != '已导入':
+    missing = p['credential'] not in ('已导入',) \
+        and not p['credential'].startswith('已导入·')
+    if missing:
         text, bg, fg = p['credential'], '#f3f4f6', '#6b7280'
         big = '未导入凭证'
     initial = p['title'][:1]
-    if p['credential'] != '已导入':
+    if missing:
         btn = ('<a class="btn gray" href="/settings" '
                'onclick="event.stopPropagation()">导入凭证</a>')
     elif p['state'] in ('ok', 'already'):
@@ -202,42 +295,67 @@ body { margin:0; padding:20px; background:#f3f6f9;
 .mrow .amt { text-align:right; font-weight:600; color:#111827; }
 .mrow .exp { color:#6b7280; font-size:12px; text-align:right; }
 .mnote { font-size:13px; color:#6b7280; padding:14px 2px; text-align:center; }
+.mgrouplabel { font-size:13px; font-weight:700; color:#374151; margin:12px 0 4px;
+               border-left:3px solid #2563eb; padding-left:8px; }
 .msum { display:flex; gap:10px; margin:0 0 12px; }
 .msum span { flex:1; background:#f8fafc; border:1px solid #eef0f3; border-radius:10px;
              padding:8px 12px; font-size:15px; font-weight:600; color:#111827; }
 .msum b { font-size:12px; font-weight:500; color:#6b7280; margin-right:6px; }
 """
 
-_JS = """
+_JS = r"""
 async function doCheckin(p){
   const r = await fetch('/api/checkin/'+p,{method:'POST'});
   const j = await r.json();
   alert(j.ok ? ('签到结果：'+j.state+' '+j.message) : ('失败：'+j.message));
   location.reload();
 }
-async function saveCred(p){
-  const body = {};
-  document.querySelectorAll('[data-p="'+p+'"]').forEach(el => {
+async function saveCred(p,id){
+  const body = {id};
+  document.querySelectorAll('[data-p="'+p+'"][data-id="'+id+'"]').forEach(el => {
     if (el.value.trim()) body[el.dataset.field] = el.value.trim();
   });
   if (!body.cookie && !body.token) { alert('请先粘贴内容'); return; }
   const r = await fetch('/api/credentials/'+p,{method:'POST',
     headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const j = await r.json();
-  alert(j.ok ? '凭证已保存并导入' : ('失败：'+j.message));
+  alert(j.ok ? '凭证已保存' : ('失败：'+j.message));
+  if (j.ok) location.reload();
+}
+let acctSeq = 0;
+function addAcct(p, btn){
+  acctSeq++;
+  const id = 'new'+acctSeq;
+  const div = document.createElement('div');
+  div.className = 'acct';
+  let h = '<div class="row"><span class="name" style="font-size:14px">新账号'
+    + acctSeq + '（保存后可用备注改名）</span></div>';
+  const seen = new Set();
+  document.querySelectorAll('[data-p="'+p+'"]').forEach(el => {
+    const f = el.dataset.field;
+    if (f === 'label' || seen.has(f)) return;
+    seen.add(f);
+    h += '<textarea data-p="'+p+'" data-id="'+id+'" data-field="'+f
+      + '" rows="3" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;'
+      + 'border-radius:8px;padding:8px;font-size:12px;margin-top:6px"></textarea>';
+  });
+  h += '<button class="btn blue" style="margin-top:8px;width:auto;padding:8px 16px" '
+    + 'onclick="saveCred(\''+p+'\',\''+id+'\')">保存</button>';
+  div.innerHTML = h;
+  btn.parentNode.insertBefore(div, btn);
+}
+async function delAcct(p,id){
+  if (!confirm('删除该平台该账号的凭证？')) return;
+  const r = await fetch('/api/credentials/'+p,{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({clear:true,id})});
+  const j = await r.json();
+  alert(j.ok ? '已删除' : ('失败：'+j.message));
+  location.reload();
 }
 async function scanLocal(){
   const r = await fetch('/api/scan',{method:'POST'});
   const j = await r.json();
   alert(j.ok && j.platforms.length ? ('已导入：'+j.platforms.join('、')) : (j.message || '未发现可导入账号'));
-  location.reload();
-}
-async function clearCred(p){
-  if (!confirm('清空该平台凭证？')) return;
-  const r = await fetch('/api/credentials/'+p,{method:'POST',
-    headers:{'Content-Type':'application/json'},body:JSON.stringify({clear:true})});
-  const j = await r.json();
-  alert(j.ok ? '已清空' : ('失败：'+j.message));
   location.reload();
 }
 async function webLogin(p){
@@ -258,21 +376,26 @@ async function showDetail(p){
     + esc((j.title||'?').slice(0,1)) + '</span><span class="mtitle">' + esc(j.title)
     + '</span><span class="mbal">余额 ' + (j.balance ? esc(j.balance) : '—')
     + '</span><span class="mclose" onclick="closeDetail()">✕</span></div>';
-  if (j.rows && j.rows.length) {
-    const sums = {};
-    j.rows.forEach(row => { const v = parseFloat(row.amount);
-      if (!isNaN(v)) sums[row.tag] = (sums[row.tag] || 0) + v; });
-    const keys = Object.keys(sums);
-    if (keys.length > 1) h += '<div class="msum">' + keys.map(k =>
-      '<span><b>' + esc(k) + '</b> ' + fmtNum(sums[k]) + '</span>').join('')
-      + '</div>';
-    h += j.rows.map(row => '<div class="mrow"><span class="mtag" style="background:'
-      + ac + '1a;color:' + ac + '">' + esc(row.tag) + '</span><span>' + esc(row.name)
-      + '</span><span class="amt">' + esc(row.amount) + '</span><span class="exp">'
-      + esc(row.expire) + '</span></div>').join('');
-  } else {
-    h += '<div class="mnote">' + esc(j.note || '暂无明细') + '</div>';
-  }
+  const groups = (j.accounts && j.accounts.length > 1) ? j.accounts
+    : [{label:'', rows:j.rows||[], note:j.note||''}];
+  groups.forEach(g => {
+    if (g.label) h += '<div class="mgrouplabel">' + esc(g.label) + '</div>';
+    if (g.rows && g.rows.length) {
+      const sums = {};
+      g.rows.forEach(row => { const v = parseFloat(row.amount);
+        if (!isNaN(v)) sums[row.tag] = (sums[row.tag] || 0) + v; });
+      const keys = Object.keys(sums);
+      if (keys.length > 1) h += '<div class="msum">' + keys.map(k =>
+        '<span><b>' + esc(k) + '</b> ' + fmtNum(sums[k]) + '</span>').join('')
+        + '</div>';
+      h += g.rows.map(row => '<div class="mrow"><span class="mtag" style="background:'
+        + ac + '1a;color:' + ac + '">' + esc(row.tag) + '</span><span>' + esc(row.name)
+        + '</span><span class="amt">' + esc(row.amount) + '</span><span class="exp">'
+        + esc(row.expire) + '</span></div>').join('');
+    } else {
+      h += '<div class="mnote">' + esc(g.note || '暂无明细') + '</div>';
+    }
+  });
   document.getElementById('modal').innerHTML = h;
   document.getElementById('mask').style.display = 'flex';
 }
@@ -307,27 +430,49 @@ def render_settings(status: dict[str, Any]) -> str:
     blocks = []
     for p in status['platforms']:
         fields = _CRED_FIELDS.get(p['platform'], [('cookie', 'Cookie 整串')])
-        inputs = '\n'.join(
-            f'<div class="slogan" style="margin:8px 0 4px">{label}</div>'
-            f'<textarea id="cred-{p["platform"]}-{name}" data-p="{p["platform"]}" '
-            f'data-field="{name}" rows="3" style="width:100%;'
-            f'box-sizing:border-box;border:1px solid #d1d5db;border-radius:8px;'
-            f'padding:8px;font-size:12px"></textarea>'
-            for name, label in fields)
+        accounts = p.get('accounts') or [{'id': 'main', 'label': '主账号'}]
+        acct_html = []
+        for a in accounts:
+            aid = sanitize_acct_id(a.get('id')) or 'main'
+            label = sanitize_label(a.get('label'))
+            dom_id = '' if aid == 'main' else f'-{aid}'
+            inputs = '\n'.join(
+                f'<div class="slogan" style="margin:8px 0 4px">{label}</div>'
+                f'<textarea id="cred-{p["platform"]}{dom_id}-{name}" data-p="{p["platform"]}" '
+                f'data-id="{aid}" data-field="{name}" rows="3" style="width:100%;'
+                f'box-sizing:border-box;border:1px solid #d1d5db;border-radius:8px;'
+                f'padding:8px;font-size:12px"></textarea>'
+                for name, label in fields)
+            del_btn = (
+                f'<button class="btn gray" style="margin-top:8px;width:auto;'
+                f'padding:8px 16px" '
+                f'''onclick="delAcct('{p['platform']}','{aid}')"''' '>删除该账号</button>'
+                if len(accounts) > 1 or aid != 'main' else '')
+            acct_html.append(
+                f'<div class="acct"><div class="row"><input data-p="{p["platform"]}" '
+                f'data-id="{aid}" data-field="label" '
+                f'placeholder="{html_mod.escape(label or aid, quote=True)}" '
+                f'style="flex:1;border:1px solid #d1d5db;border-radius:8px;'
+                f'padding:6px 8px;font-size:13px" '
+                f'value="{html_mod.escape(label, quote=True)}"></div>'
+                + inputs
+                + f'<button class="btn blue" style="margin-top:8px;width:auto;'
+                  f'padding:8px 16px" '
+                  f'''onclick="saveCred('{p['platform']}','{aid}')"''' '>保存</button>'
+                + del_btn + '</div>')
         login_btn = (
             f'<button class="btn blue" style="margin-top:8px;width:auto;padding:8px 16px"'
             f''' onclick="webLogin('{p['platform']}')"''' '>网页登录获取</button>'
             if p['platform'] in _BROWSER_LOGIN else '')
+        add_btn = (
+            f'<button class="btn gray" style="margin-top:8px;width:auto;'
+            f'padding:8px 16px" '
+            f'''onclick="addAcct('{p['platform']}", this)"''' '+ 添加账号</button>')
         blocks.append(
             f'<div class="card"><div class="row"><span class="name">{p["title"]}</span>'
             f'<span class="pill" style="background:#f3f4f6;color:#6b7280">'
             f'{p["credential"]}</span></div>'
-            + inputs +
-            f'<button class="btn blue" style="margin-top:8px;width:auto;padding:8px 16px" '
-            f'''onclick="saveCred('{p['platform']}')"''' '>保存并导入</button>'
-            + login_btn +
-            f'<button class="btn gray" style="margin-top:8px;width:auto;padding:8px 16px" '
-            f'''onclick="clearCred('{p['platform']}')"''' '>清空凭证</button></div>')
+            + '\n'.join(acct_html) + add_btn + login_btn + '</div>')
     cards = '\n'.join(blocks)
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -411,16 +556,22 @@ class _Handler(BaseHTTPRequestHandler):
             return
         if head.endswith('/api/credentials'):
             if payload.get('clear'):
-                self._json({'ok': True, **store.clear(platform)})
+                acct_id = payload.get('id')
+                if acct_id:
+                    store.remove(platform, acct_id)
+                    self._json({'ok': True, 'message': '已删除该账号'})
+                else:
+                    self._json({'ok': True, **store.clear(platform)})
                 return
-            if not (payload.get('cookie') or payload.get('token')):
+            fields = {k: v for k, v in payload.items()
+                      if v not in ('', None) and k != 'id'}
+            if not (fields.get('cookie') or fields.get('token')):
                 self._json({'ok': False, 'message': '需提供 cookie 或 token 字段'})
                 return
-            inbox = cfg.data_dir / 'inbox'
-            inbox.mkdir(parents=True, exist_ok=True)
-            (inbox / f'{platform}.json').write_text(
-                json.dumps(payload, ensure_ascii=False), encoding='utf-8')
-            store.import_inbox()
+            acct_id = payload.get('id')
+            if acct_id and str(acct_id).startswith('new'):
+                acct_id = None            # 前端占位 id：由服务端按凭证哈希建号
+            store.upsert(platform, fields, acct_id=acct_id)
             self._json({'ok': True, 'message': '已导入'})
         elif head.endswith('/api/checkin'):
             from app.main import cmd_run_once

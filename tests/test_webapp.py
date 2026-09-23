@@ -2,7 +2,7 @@ from app.config import Config
 from app.credentials import CredentialStore
 from app.platforms.base import CheckinResult
 from app.state import DailyState
-from app.webapp import collect_status, render_html
+from app.webapp import collect_status, render_html, render_settings
 
 PLATFORMS = ['wps', 'dazi', 'minimax', 'qoder', 'modelscope']
 
@@ -11,6 +11,7 @@ def _setup(tmp_path):
     cfg = Config((10, 5), 3, '', tmp_path)
     store = CredentialStore(tmp_path, set(PLATFORMS))
     store.save('wps', {'cookie': 'wps_sid=x'})
+    store.save('dazi', {'cookie': 'bce-user-info=x'})
     state = DailyState(tmp_path)
     state.mark('wps', CheckinResult('ok', '成功', '+100', balance='2592', streak=3),
                state_today())
@@ -69,3 +70,65 @@ def test_card_shows_earliest_expiring(tmp_path):
     assert wps['expiring'] == '1500 · 10-15到期'
     html = render_html(status)
     assert '最快到期' in html and '1500 · 10-15到期' in html
+
+
+def _setup_two_accounts(tmp_path):
+    import datetime as dt
+    today = dt.date.today().isoformat()
+    cfg, store, state = _setup(tmp_path)
+    store.upsert('wps', {'cookie': 'wps_sid=y', 'label': '小号'})
+    second = store.load_all('wps')[1]['id']
+    state.mark('wps', CheckinResult('ok', '主成', '+100 积分', balance='500'), today)
+    state.mark('wps', CheckinResult('ok', '二成', '+100 积分', balance='500'),
+               today, account=second)
+    state.set_expiring('wps', today, '50 · 10-01到期', account=second)
+    state.set_expiring('wps', today, '80 · 11-20到期')
+    return cfg, store, state, today
+
+
+def test_collect_status_aggregates_accounts(tmp_path):
+    cfg, store, state, today = _setup_two_accounts(tmp_path)
+    status = collect_status(cfg, store, state, PLATFORMS)
+    wps = next(p for p in status['platforms'] if p['platform'] == 'wps')
+    assert wps['state'] == 'ok'
+    assert wps['reward'] == '+200 积分' and wps['balance'] == '1000'
+    assert wps['expiring'] == '50 · 10-01到期'      # 跨账号取最早
+    assert len(wps['accounts']) == 2
+    assert {a['label'] for a in wps['accounts']} == {'主账号', '小号'}
+    assert '2 账号' in wps['account_note']
+
+
+def test_card_pill_shows_account_count(tmp_path):
+    cfg, store, state, today = _setup_two_accounts(tmp_path)
+    html = render_html(collect_status(cfg, store, state, PLATFORMS))
+    assert '今天已签到 ✅·2号' in html
+
+
+def test_single_account_unchanged(tmp_path):
+    cfg, store, state = _setup(tmp_path)
+    status = collect_status(cfg, store, state, PLATFORMS)
+    wps = next(p for p in status['platforms'] if p['platform'] == 'wps')
+    assert wps['reward'] == '+100' and wps['account_note'] == ''
+    assert len(wps['accounts']) == 1
+
+
+def test_settings_escapes_hostile_label(tmp_path):
+    cfg, store, state = _setup(tmp_path)
+    store.upsert('wps', {'cookie': 'b', 'label': 'x"onmouseover="alert(1)'})
+    status = collect_status(cfg, store, state, PLATFORMS)
+    html = render_settings(status)
+    # 引号被清洗 → 无法提前闭合属性形成注入；纯文字残留无害
+    assert 'x"on' not in html and 'onmouseover="' not in html
+
+
+def test_ghost_record_of_removed_account_ignored(tmp_path):
+    import datetime as dt
+    cfg, store, state = _setup(tmp_path)
+    # 先以"未导入凭证"落 main 错误记录，再导入哈希 id 账号 → 卡片不应钉死失败
+    state.mark('qoder', CheckinResult('error', '未导入凭证（Qoder）'),
+               dt.date.today().isoformat())
+    store2 = CredentialStore(tmp_path, set(PLATFORMS))
+    store2.upsert('qoder', {'token': 'dt-new'})
+    status = collect_status(cfg, store2, state, PLATFORMS)
+    qoder = next(p for p in status['platforms'] if p['platform'] == 'qoder')
+    assert qoder['state'] == ''

@@ -276,3 +276,71 @@ def test_run_balance_no_breakdown_no_expiring(stub_registered):
         assert state.expirings == []
     finally:
         del ADAPTERS['stub']
+
+
+# ---------- 多账号 ----------
+
+def test_run_all_two_accounts_aggregates(stub_registered):
+    class Stub2(Stub):
+        def credits(self, creds):
+            return creds.get('bal')
+    ADAPTERS['stub'] = Stub2()
+    calls = []
+
+    def runner(adapter, creds, config):
+        calls.append(creds['token'])
+        return CheckinResult('ok', '成', '+100 积分')
+    state = FakeState()
+    store = FakeStore({'stub': [{'token': 't1', 'id': 'main', 'bal': '500'},
+                                {'token': 't2', 'id': 'ab12', 'bal': '500'}]})
+    out = run_all(['stub'], store=store, state=state, config=FakeConfig(),
+                  today='d', now_minutes=0, run_platform=runner)
+    assert calls == ['t1', 't2']
+    assert ('stub', 'ok') in state.marked and ('stub#ab12', 'ok') in state.marked
+    r = out[0].result
+    assert r.state == 'ok' and '2/2' in r.message
+    assert r.reward == '+200 积分' and r.balance == '1000'
+    assert set(out[0].accounts) == {'main', 'ab12'}
+
+
+def test_run_all_skips_done_account_only(stub_registered):
+    ADAPTERS['stub'] = Stub()
+    calls = []
+
+    def runner(adapter, creds, config):
+        calls.append(creds['token'])
+        return CheckinResult('ok', '成', '+100 积分')
+    state = FakeState(done={('stub', 'main')})
+    store = FakeStore({'stub': [{'token': 't1', 'id': 'main'},
+                                {'token': 't2', 'id': 'ab12'}]})
+    out = run_all(['stub'], store=store, state=state, config=FakeConfig(),
+                  today='d', now_minutes=0, run_platform=runner)
+    assert calls == ['t2']                    # 只补未签的账号
+    assert out[0].result.state == 'ok' and '2/2' in out[0].result.message
+
+
+def test_run_all_partial_failure_names_account(stub_registered):
+    ADAPTERS['stub'] = Stub()
+
+    def runner(adapter, creds, config):
+        if creds['token'] == 't2':
+            return CheckinResult('error', 'token失效')
+        return CheckinResult('ok', '成', '+100 积分')
+    store = FakeStore({'stub': [{'token': 't1', 'id': 'main'},
+                                {'token': 't2', 'id': 'ab12',
+                                 'label': '小号'}]})
+    out = run_all(['stub'], store=store, state=FakeState(),
+                  config=FakeConfig(),
+                  today='d', now_minutes=0, run_platform=runner)
+    r = out[0].result
+    assert r.state == 'error' and '1/2' in r.message and '小号：token失效' in r.message
+
+
+def test_run_balance_per_accounts_sums(stub_registered):
+    ADAPTERS['stub'] = StubBal()
+    state = FakeState()
+    store = FakeStore({'stub': [{'token': 't1', 'id': 'main'},
+                                {'token': 't2', 'id': 'x2'}]})
+    out = run_balance(store, state, ['stub'], 'd')
+    assert ('stub', '123') in state.balances and ('stub#x2', '123') in state.balances
+    assert out == {'stub': '246'}

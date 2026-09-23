@@ -45,7 +45,8 @@ def build_text(outcomes: list[CheckinOutcome], today: str) -> dict[str, Any]:
             + (f'有失败 {done}/{len(outcomes)}' if failed else f'签到成功 {done}/{len(outcomes)}'))
     lines = [head]
     for o in outcomes:
-        detail = o.result.reward or o.result.message
+        detail = (o.result.message if o.result.state == 'error'
+                  else o.result.reward or o.result.message)
         lines.append(f'{_dot(o)} {_title(o)} {detail}'[:60])
     return {'msgtype': 'text', 'text': {'content': chr(10).join(lines)}}
 
@@ -59,7 +60,8 @@ def build_textcard(outcomes: list[CheckinOutcome], today: str) -> dict[str, Any]
     lines = [today]
     for o in outcomes:
         r = o.result
-        detail = r.reward or (r.message if r.state in ('error', 'busy') else '已签到')
+        detail = (r.message if r.state == 'error'
+                  else r.reward or (r.message if r.state == 'busy' else '已签到'))
         detail = _compact(detail)
         name = _SHORT_TITLES.get(_title(o), _title(o))
         extras = []
