@@ -24,6 +24,7 @@ class Config:
     wecom_chat_id: str = ''
     wecom_api_base: str = 'https://qyapi.weixin.qq.com/cgi-bin'
     balance_refresh_minutes: int = 60
+    panel_token: str = ''       # 面板访问令牌；空=不鉴权（仅内网时可用）
 
 
 def _parse_checkin_time(raw: str) -> tuple[int, int]:
@@ -63,4 +64,5 @@ def load_config(env: dict[str, str] | None = None) -> Config:
         or 'https://qyapi.weixin.qq.com/cgi-bin',
         balance_refresh_minutes=_parse_int(
             source.get('BALANCE_REFRESH_MINUTES', '')) or 60,
+        panel_token=source.get('PANEL_TOKEN', '').strip(),
     )

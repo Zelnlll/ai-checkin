@@ -3,6 +3,14 @@
 遵循语义化版本（SemVer）。版本号单一来源：`app/__init__.py` 的 `__version__`；
 发版流程 = 改版本号 + 更新本文件 + `git tag vX.Y.Z` + push main 与 tags。
 
+## v1.5.2 — 2026-09-23
+
+### 安全：面板 token 鉴权（PANEL_TOKEN）
+- 配置后所有页面/API 需令牌：浏览器登录页换 PANEL_AUTH cookie，
+  接口走 X-Panel-Token 头或 ?k=（compare_digest 恒定时间比较）。
+- 未配置=不鉴权（内网场景向后兼容）。PC 推送工具自动读取
+  环境变量 PANEL_TOKEN 或 tools/.panel_token 文件。
+
 ## v1.5.1 — 2026-09-23
 
 ### 修复：合并单容器后二轮评审

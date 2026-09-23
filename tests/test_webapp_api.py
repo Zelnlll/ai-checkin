@@ -394,3 +394,63 @@ def test_panel_port_fallback_on_bad_env(monkeypatch, tmp_path):
     except KeyboardInterrupt:
         pass
     assert started.get('port') == 8000
+
+
+# ---------- 面板 token 鉴权 ----------
+
+def _auth_cfg(tmp_path):
+    return Config((10, 5), 3, '', tmp_path, panel_token='s3cret')
+
+
+def test_token_required_for_pages_and_api(tmp_path):
+    import http.client
+    cfg = _auth_cfg(tmp_path)
+    httpd, base = _start_server(cfg)
+    try:
+        html = _get(f'{base}/')
+        assert '访问验证' in html and '今日签到进度' not in html
+        conn = http.client.HTTPConnection('127.0.0.1', httpd.server_address[1])
+        conn.request('POST', '/api/credentials/wps',
+                     body=json.dumps({'cookie': 'x'}),
+                     headers={'Content-Type': 'application/json'})
+        assert conn.getresponse().status == 401
+        conn.request('GET', '/api/status')
+        assert conn.getresponse().status == 401
+    finally:
+        httpd.shutdown(); httpd.server_close()
+
+
+def test_token_query_and_header_and_login_cookie(tmp_path):
+    cfg = _auth_cfg(tmp_path)
+    httpd, base = _start_server(cfg)
+    try:
+        assert '签到中心' in _get(f'{base}/?k=s3cret')
+        import http.client
+        conn = http.client.HTTPConnection('127.0.0.1', httpd.server_address[1])
+        conn.request('GET', '/api/status', headers={'X-Panel-Token': 's3cret'})
+        assert conn.getresponse().status == 200
+        # 登录换 cookie
+        conn = http.client.HTTPConnection('127.0.0.1', httpd.server_address[1])
+        conn.request('POST', '/auth', body=json.dumps({'token': 's3cret'}),
+                     headers={'Content-Type': 'application/json'})
+        r = conn.getresponse()
+        cookie = r.getheader('Set-Cookie')
+        assert r.status == 200 and 'PANEL_AUTH=s3cret' in cookie
+        conn = http.client.HTTPConnection('127.0.0.1', httpd.server_address[1])
+        conn.request('GET', '/', headers={'Cookie': cookie.split(';')[0]})
+        assert '签到中心' in conn.getresponse().read().decode('utf-8')
+        # 错 token 不放行
+        conn = http.client.HTTPConnection('127.0.0.1', httpd.server_address[1])
+        conn.request('GET', '/?k=wrong')
+        assert '访问验证' in conn.getresponse().read().decode('utf-8')
+    finally:
+        httpd.shutdown(); httpd.server_close()
+
+
+def test_no_token_configured_open(tmp_path):
+    cfg = Config((10, 5), 3, '', tmp_path)
+    httpd, base = _start_server(cfg)
+    try:
+        assert '签到中心' in _get(f'{base}/')
+    finally:
+        httpd.shutdown(); httpd.server_close()

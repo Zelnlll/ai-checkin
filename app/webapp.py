@@ -11,6 +11,7 @@ from __future__ import annotations
 import datetime as dt
 import html as html_mod
 import json
+import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -540,6 +541,67 @@ def _end_checkin(platform: str) -> None:
 
 
 class _Handler(BaseHTTPRequestHandler):
+    def _authorized(self) -> bool:
+        token = self.server.cfg.panel_token
+        if not token:
+            return True
+        import hmac
+        import urllib.parse
+        candidates = [self.headers.get('X-Panel-Token') or '']
+        ck = re.search(r'PANEL_AUTH=([^;]+)', self.headers.get('Cookie') or '')
+        if ck:
+            candidates.append(urllib.parse.unquote(ck.group(1)))
+        q = urllib.parse.parse_qs(
+            urllib.parse.urlparse(self.path).query).get('k', [''])[0]
+        candidates.append(q)
+        return any(c and hmac.compare_digest(c, token) for c in candidates)
+
+    def _login_page(self) -> None:
+        self._html("""<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>访问验证 · 签到中心</title><style>""" + _STYLE + """</style></head>
+<body><div class="wrap"><div class="head" style="max-width:360px;margin:15vh auto 0;
+text-align:center"><div class="title">🔒 访问验证</div>
+<div class="slogan" style="margin:10px 0">请输入面板访问令牌</div>
+<input id="tk" type="password" placeholder="PANEL_TOKEN" style="width:100%;
+box-sizing:border-box;border:1px solid #d1d5db;border-radius:8px;padding:10px;
+font-size:14px">
+<button class="btn blue" style="margin-top:10px" onclick="go()">进入</button>
+</div></div><script>
+async function go(){
+  const v = document.getElementById('tk').value.trim();
+  const r = await fetch('/auth',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({token:v})});
+  if (r.ok) location.href = '/?k=' + encodeURIComponent(v);
+  else alert('令牌不正确');
+}
+document.getElementById('tk').addEventListener('keydown', e =>
+  e.key === 'Enter' && go());
+</script></body></html>""")
+
+    def _auth_login(self) -> None:
+        import hmac
+        length = min(int(self.headers.get('Content-Length') or 0), 4096)
+        try:
+            payload = json.loads(self.rfile.read(length) or b'{}')
+        except Exception:
+            payload = {}
+        token = self.server.cfg.panel_token
+        given = str(payload.get('token') or '')
+        if token and given and hmac.compare_digest(given, token):
+            body = json.dumps({'ok': True}).encode()
+            self.send_response(200)
+            self.send_header('Set-Cookie',
+                             f'PANEL_AUTH={given}; Path=/; SameSite=Lax')
+        else:
+            body = json.dumps({'ok': False}).encode()
+            self.send_response(401)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _json(self, obj: dict, code: int = 200) -> None:
         body = json.dumps(obj, ensure_ascii=False).encode('utf-8')
         self.send_response(code)
@@ -569,6 +631,12 @@ class _Handler(BaseHTTPRequestHandler):
             self._json({'ok': False, 'message': f'{type(exc).__name__}: {exc}'}, 500)
 
     def _get(self):
+        if not self._authorized():
+            if self.path.startswith('/api/'):
+                self._json({'ok': False, 'message': '需要访问令牌'}, 401)
+            else:
+                self._login_page()
+            return
         cfg, store, state, status = self._status()
         if self.path.startswith('/api/status'):
             self._json(status)
@@ -593,6 +661,12 @@ class _Handler(BaseHTTPRequestHandler):
         ctype = (self.headers.get('Content-Type') or '').lower()
         if 'application/json' not in ctype:
             self._json({'ok': False, 'message': '需要 application/json'}, 415)
+            return
+        if self.path.startswith('/auth'):
+            self._auth_login()
+            return
+        if not self._authorized():
+            self._json({'ok': False, 'message': '需要访问令牌'}, 401)
             return
         cfg, store, state, _ = self._status()
         length = min(int(self.headers.get('Content-Length') or 0), 1024 * 1024)
