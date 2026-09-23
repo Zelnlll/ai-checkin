@@ -5,6 +5,8 @@ FROM mcr.m.daocloud.io/playwright/python:v1.49.0-noble
 
 WORKDIR /app
 COPY app/ app/
+# fnOS 上 git 写出的文件权限会是 000，构建期兜底修正（与源端 chmod 无关）
+RUN chmod -R a+rX app/
 
 ENV PYTHONPATH=/app \
     TZ=Asia/Shanghai \
