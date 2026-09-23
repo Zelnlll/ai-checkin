@@ -17,30 +17,43 @@ LA_SPEC = {'url': 'x', 'local_storage': 'token',
 def test_capture_minimax_token_and_user_id():
     captured = {}
     req = FakeReq('https://agent.minimaxi.com/minimax-cloud/api/v1/x?user_id=U9',
-                  {'token': 'JWT-MM'})
+                  {'token': 'eyJJWT-MM'})
     _capture_request(MM_SPEC, captured, req)
-    assert captured['token'] == 'JWT-MM' and captured['user_id'] == 'U9'
+    assert captured['token'] == 'eyJJWT-MM' and captured['user_id'] == 'U9'
 
 
 def test_capture_linkai_bearer_authorization():
     captured = {}
     req = FakeReq('https://link-ai.tech/api/chat/web/app/user/get/balance',
-                  {'authorization': 'Bearer JWT-LA'})
+                  {'authorization': 'Bearer eyJJWT-LA'})
     _capture_request(LA_SPEC, captured, req)
-    assert captured['token'] == 'JWT-LA'
+    assert captured['token'] == 'eyJJWT-LA'
+
+
+def test_capture_rejects_non_jwt_and_anon_bearer():
+    captured = {}
+    for junk in ('Bearer', 'Bearer undefined', 'Bearer 123'):
+        _capture_request(LA_SPEC, captured,
+                         FakeReq('https://link-ai.tech/api/a',
+                                 {'authorization': junk}))
+    assert captured == {}
+    _capture_request(LA_SPEC, captured,
+                     FakeReq('https://link-ai.tech/api/b',
+                             {'authorization': 'Bearer eyJreal'}))
+    assert captured['token'] == 'eyJreal'
 
 
 def test_capture_ignores_other_urls_and_first_wins():
     captured = {}
     _capture_request(LA_SPEC, captured,
                      FakeReq('https://link-ai.tech/console/account',
-                             {'authorization': 'Bearer X'}))
+                             {'authorization': 'Bearer eyJX'}))
     assert captured == {}
     _capture_request(LA_SPEC, captured,
-                     FakeReq('https://link-ai.tech/api/a', {'authorization': 'Bearer T1'}))
+                     FakeReq('https://link-ai.tech/api/a', {'authorization': 'Bearer eyJT1'}))
     _capture_request(LA_SPEC, captured,
-                     FakeReq('https://link-ai.tech/api/b', {'authorization': 'Bearer T2'}))
-    assert captured['token'] == 'T1'
+                     FakeReq('https://link-ai.tech/api/b', {'authorization': 'Bearer eyJT2'}))
+    assert captured['token'] == 'eyJT1'
 
 
 class FakeCtx:

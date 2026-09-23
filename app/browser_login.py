@@ -38,7 +38,8 @@ def _capture_request(spec: dict[str, Any], captured: dict[str, str],
         strip = cap.get('strip', '')
         if strip and v.startswith(strip):
             v = v[len(strip):]
-        if v:
+        # 只认 JWT 形态（未登录时页面会先发裸 Bearer/undefined 的匿名请求）
+        if v.startswith('eyJ'):
             captured['token'] = v
     if 'user_id' not in captured:
         from urllib.parse import parse_qs, urlparse
