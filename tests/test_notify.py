@@ -175,3 +175,11 @@ def test_platform_icons_are_uniform_orange_diamond():
     outcomes = [CheckinOutcome('wps', CheckinResult('ok', 'x', '+1'))]
     text = build_text(outcomes, '2026-09-23')['text']['content']
     assert '🔸' in text
+
+
+def test_textcard_row_includes_expiring():
+    from app.notify import build_textcard
+    outcomes = [CheckinOutcome('wps', CheckinResult(
+        'ok', '成', '+100 积分', '2592', 3, expiring='100 · 09-30到期'))]
+    d = build_textcard(outcomes, '2026-09-23')['textcard']['description']
+    assert '09-30到期' in d

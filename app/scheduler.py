@@ -68,7 +68,8 @@ def _aggregate(platform_title: str,
         reward = f'+{fmt_num(sum(rewards))} 积分'
     balance = results[0].balance if len(per) == 1 else (
         fmt_num(sum(balances)) if balances else '')
-    return CheckinResult(state, message, reward, balance, results[0].streak)
+    return CheckinResult(state, message, reward, balance, results[0].streak,
+                         expiring=earliest_of([r.expiring for r in results]))
 
 
 def _enrich(adapter: Any, creds: dict, result: CheckinResult,
@@ -137,6 +138,26 @@ def _streak(state: Any, platform: str, today: str,
         return 0
 
 
+def _cache_expiring(state: Any, adapter: Any, creds: dict,
+                    platform: str, today: str, account: str) -> str:
+    """算最快到期积分→缓存进 state（set_expiring 只合并该字段）；失败返回 ''。"""
+    exp = _earliest_expiring(adapter, creds) or ''
+    if exp:
+        state.set_expiring(platform, today, exp, account)
+    return exp
+
+
+def earliest_of(vals: list[str]) -> str:
+    """多个 '100 · 09-30到期' 取日期最早；无值返回 ''。"""
+    import re as _re
+
+    def key(e: str) -> str:
+        m = _re.search(r'·\s*([\d-]+)到期', e)
+        return m.group(1) if m else '9999'
+    got = [e for e in vals if e]
+    return min(got, key=key) if got else ''
+
+
 def run_all(platforms: list[str], *, store: Any, state: Any, config: Any,
             today: str, now_minutes: int,
             run_platform: Callable[[Any, dict, Any], CheckinResult]
@@ -157,9 +178,10 @@ def run_all(platforms: list[str], *, store: Any, state: Any, config: Any,
             if state.done_today(platform, key):
                 value = _refresh_balance(state, adapter, acct, platform,
                                          today, key)
+                exp = _cache_expiring(state, adapter, acct, platform, today, key)
                 per.append((key, label, CheckinResult(
                     'already', '今日已完成，跳过', balance=value or '',
-                    streak=_streak(state, platform, today, key))))
+                    streak=_streak(state, platform, today, key), expiring=exp)))
                 continue
             result = run_platform(adapter, acct, config)
             state.mark(platform, result, today, key)   # 失败也落盘：面板可见原因
@@ -167,6 +189,9 @@ def run_all(platforms: list[str], *, store: Any, state: Any, config: Any,
                 result = _enrich(adapter, acct, result, state, platform,
                                  today, key)
                 state.mark(platform, result, today, key)   # 再落 enriched 值
+            exp = _cache_expiring(state, adapter, acct, platform, today, key)
+            if exp:
+                result = replace(result, expiring=exp)
             per.append((key, label, result))
         agg = _aggregate(adapter.title, per)
         outcomes.append(CheckinOutcome(platform, agg,

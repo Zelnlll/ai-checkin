@@ -3,6 +3,15 @@
 遵循语义化版本（SemVer）。版本号单一来源：`app/__init__.py` 的 `__version__`；
 发版流程 = 改版本号 + 更新本文件 + `git tag vX.Y.Z` + push main 与 tags。
 
+## v1.4.3 — 2026-09-23
+
+### 新功能
+- 通知行追加"最快到期积分"：签到轮逐账号算 expiring（同面板缓存，
+  set_expiring 落 state），多账号聚合取日期最早；textcard 行格式
+  `🔸 平台 +100｜100 · 09-30到期｜余2592｜连3天`。
+- CheckinResult 新增 expiring 字段；取最早逻辑收敛为 scheduler.earliest_of
+  （webapp 复用，删重复）。
+
 ## v1.4.2 — 2026-09-23
 
 ### 优化

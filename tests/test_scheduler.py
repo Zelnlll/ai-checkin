@@ -344,3 +344,26 @@ def test_run_balance_per_accounts_sums(stub_registered):
     out = run_balance(store, state, ['stub'], 'd')
     assert ('stub', '123') in state.balances and ('stub#x2', '123') in state.balances
     assert out == {'stub': '246'}
+
+
+# ---------- 通知最快到期 ----------
+
+def test_run_all_attaches_earliest_expiring(stub_registered):
+    class StubExp(Stub):
+        def breakdown(self, creds):
+            if creds.get('token') == 't2':
+                return [{'tag': '资源包', 'name': '包', 'amount': '50',
+                         'expire': '20天后过期（10-13）'}]
+            return [{'tag': '资源包', 'name': '包', 'amount': '100',
+                     'expire': '7天后过期（09-30）'}]
+    ADAPTERS['stub'] = StubExp()
+    state = FakeState()
+    store = FakeStore({'stub': [{'token': 't1', 'id': 'main'},
+                                {'token': 't2', 'id': 'x2'}]})
+    out = run_all(['stub'], store=store, state=state, config=FakeConfig(),
+                  today='d', now_minutes=0,
+                  run_platform=lambda a, c, cfg: CheckinResult('ok', '成', '+100 积分'))
+    # 聚合取跨账号最早：100 · 09-30
+    assert out[0].result.expiring == '100 · 09-30到期'
+    assert ('stub', '100 · 09-30到期') in state.expirings
+    assert ('stub#x2', '50 · 10-13到期') in state.expirings

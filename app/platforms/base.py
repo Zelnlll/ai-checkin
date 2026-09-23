@@ -27,6 +27,7 @@ class CheckinResult:
     reward: str = ''
     balance: str = ''
     streak: int = 0
+    expiring: str = ''      # 最快到期积分：'100 · 09-30到期'
 
     def __post_init__(self):
         if self.state not in VALID_STATES:

@@ -11,14 +11,13 @@ from __future__ import annotations
 import datetime as dt
 import html as html_mod
 import json
-import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 from app import __version__
 from app.credentials import CredentialStore, sanitize_acct_id, sanitize_label
 from app.platforms import ADAPTERS, get_adapter
-from app.scheduler import fmt_num, parse_num
+from app.scheduler import earliest_of, fmt_num, parse_num
 from app.state import DailyState
 
 _ACCENTS = {
@@ -73,14 +72,6 @@ def _sum_field(vals: list[str], prefix: str = '') -> str:
     return f'{prefix}{fmt_num(sum(nums))}' if nums else ''
 
 
-def _earliest_expiring(vals: list[str]) -> str:
-    def day(e: str) -> str:
-        m = re.search(r'·\s*([\d-]+)到期', e)
-        return m.group(1) if m else '9999'
-    got = [e for e in vals if e]
-    return min(got, key=day) if got else ''
-
-
 def _aggregate_recs(recs: dict[str, dict], order: list[tuple[str, str]]) -> dict:
     """order: [(acct_id, label)] 凭证序 → 聚合展示字段（单账号原样透传）。"""
     seq = [(aid, label, recs[aid]) for aid, label in order if aid in recs]
@@ -112,7 +103,7 @@ def _aggregate_recs(recs: dict[str, dict], order: list[tuple[str, str]]) -> dict
                   + (' 积分' if any('积分' in r.get('reward', '')
                                     for _, _, r in seq) else ''),
         'balance': _sum_field([r.get('balance', '') for _, _, r in seq]),
-        'expiring': _earliest_expiring([r.get('expiring', '') for _, _, r in seq]),
+        'expiring': earliest_of([r.get('expiring', '') for _, _, r in seq]),
         'streak': main_rec.get('streak', 0),
         'keepalive': min((r.get('keepalive', '') for _, _, r in seq), default=''),
         'at': max((r.get('at', '') for _, _, r in seq), default=''),

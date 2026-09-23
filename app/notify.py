@@ -64,6 +64,8 @@ def build_textcard(outcomes: list[CheckinOutcome], today: str) -> dict[str, Any]
         detail = _compact(detail)
         name = _SHORT_TITLES.get(_title(o), _title(o))
         extras = []
+        if r.expiring:
+            extras.append(r.expiring)
         if r.balance:
             extras.append(f'余{r.balance}')
         if r.streak >= 2:
