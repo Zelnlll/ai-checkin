@@ -101,10 +101,9 @@ class MinimaxAdapter(Adapter):
     @staticmethod
     def _call(creds: dict[str, Any], path: str, body: dict | None) -> Any:
         token = str(creds.get('token') or '').strip()
-        state = str(creds.get('browser_state') or '')
-        if state:
+        if creds.get('web_session'):
             from app import minimax_web
-            return minimax_web.web_request(path, body, token, state)
+            return minimax_web.web_request(path, body, token)
         return _request(path, body, token)
 
     def checkin(self, creds: dict[str, Any]) -> CheckinResult:

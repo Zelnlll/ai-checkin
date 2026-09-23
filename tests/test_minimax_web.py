@@ -20,53 +20,64 @@ def test_build_web_path_has_auth_params():
     assert p.startswith('/x?')
     assert 'token=' + FAKE_JWT[:20] in p
     assert 'user_id=U42' in p
-    assert 'client=web' in p
-    assert 'timezone_offset=28800' in p
-    assert 'unix=1790125591000' in p
+    assert 'timezone_id=Asia%2FShanghai' in p
+    assert 'op_ticket=undefined' in p
+    assert p.count('unix=1790125591000') == 2
+    assert p.split('?')[1].count('timezone_id') == 1
     # 同输入必须逐字节稳定（yy 签名与实发 URL 强一致）
     assert p == minimax_web.build_web_path('/x', FAKE_JWT, now_ms=1790125591000)
 
 
-def test_web_request_success_with_sig_headers(monkeypatch):
+def test_build_web_path_strips_legacy_query():
+    p = minimax_web.build_web_path('/x?timezone_id=Asia/Shanghai', FAKE_JWT,
+                                   now_ms=1)
+    assert p.startswith('/x?')
+    assert p.count('timezone_id') == 1
+
+
+def test_web_request_success(monkeypatch):
     calls = []
 
-    def fake_fetch(state, origin, path_q, headers, body):
-        calls.append((state, origin, path_q, headers, body))
-        return 200, '{"data": {"days": []}}'
-    monkeypatch.setattr(minimax_web, 'in_page_fetch', fake_fetch)
+    def fake_http(method, url, headers, body=None, timeout=25):
+        calls.append((method, url, headers, body))
+        return {'data': {'days': []}}
+    monkeypatch.setattr(minimax_web, 'http_json', fake_http)
     payload = minimax_web.web_request('/minimax-cloud/api/v1/signin/status',
-                                      None, FAKE_JWT, 'browser/minimax.json')
+                                      None, FAKE_JWT)
     assert payload['data'] == {'days': []}
-    hdrs = calls[0][3]
+    m, url, hdrs, body = calls[0]
+    assert m == 'GET' and body is None
+    assert url.startswith('https://agent.minimaxi.com/minimax-cloud')
     assert hdrs['token'] == FAKE_JWT
-    assert 'x-signature' in hdrs and 'yy' in hdrs and 'x-timestamp' in hdrs
-    assert 'Cookie' not in hdrs and 'User-Agent' not in hdrs
+    assert hdrs['x-signature'] and hdrs['yy'] and hdrs['x-timestamp']
+    assert hdrs['Referer'].endswith('agent.minimaxi.com/')
+    assert 'Cookie' not in hdrs
 
 
-def test_web_request_post_body(monkeypatch):
+def test_web_request_post_claim_signature(monkeypatch):
     seen = {}
 
-    def fake_fetch(state, origin, path_q, headers, body):
-        seen['body'] = body
+    def fake_http(method, url, headers, body=None, timeout=25):
+        seen['method'] = method
         seen['sig'] = headers['x-signature']
-        return 200, '{"data": {}}'
-    monkeypatch.setattr(minimax_web, 'in_page_fetch', fake_fetch)
-    minimax_web.web_request('/m/claim', {}, FAKE_JWT, 'browser/minimax.json',
-                            now_ms=1790125591000)
-    assert seen['body'] == '{}'
+        return {'data': {}}
+    monkeypatch.setattr(minimax_web, 'http_json', fake_http)
+    minimax_web.web_request('/m/claim', {}, FAKE_JWT, now_ms=1790125591000)
+    assert seen['method'] == 'POST'
     from app.platforms.minimax import minimax_headers
-    expect = minimax_headers(FAKE_JWT,
-                             minimax_web.build_web_path('/m/claim', FAKE_JWT,
-                                                         now_ms=1790125591000),
-                             '{}', ts='1790125591', ms='1790125591000')
+    expect = minimax_headers(
+        FAKE_JWT,
+        minimax_web.build_web_path('/m/claim', FAKE_JWT, now_ms=1790125591000),
+        '{}', ts='1790125591', ms='1790125591000')
     assert seen['sig'] == expect['x-signature']
 
 
-def test_web_request_401_is_auth_error(monkeypatch):
-    monkeypatch.setattr(minimax_web, 'in_page_fetch',
-                        lambda *a, **k: (401, ''))
+def test_web_request_401_mapped_to_auth(monkeypatch):
+    def fake_http(*a, **k):
+        raise OpError('HTTP 401：HTTP 401', kind='http')
+    monkeypatch.setattr(minimax_web, 'http_json', fake_http)
     with pytest.raises(OpError) as e:
-        minimax_web.web_request('/x', None, FAKE_JWT, 'browser/minimax.json')
+        minimax_web.web_request('/x', None, FAKE_JWT)
     assert e.value.kind == 'auth'
 
 
@@ -74,13 +85,11 @@ def test_adapter_routes_web_session(monkeypatch):
     from app.platforms.minimax import MinimaxAdapter
     hits = []
 
-    def fake_web(path_q, body, token, state):
-        hits.append((path_q, body, state))
+    def fake_web(path_q, body, token, now_ms=None):
+        hits.append((path_q, body))
         return {'data': {'days': [{'is_today': True, 'status': 3,
                                    'points': 400}]}}
     monkeypatch.setattr('app.minimax_web.web_request', fake_web)
-    res = MinimaxAdapter().checkin({'token': FAKE_JWT,
-                                    'browser_state': 'browser/minimax.json'})
+    res = MinimaxAdapter().checkin({'token': FAKE_JWT, 'web_session': True})
     assert res.state == 'already' and '400' in res.message
     assert hits[0][0].startswith('/minimax-cloud/api/v1/signin/status?')
-    assert hits[0][2] == 'browser/minimax.json'

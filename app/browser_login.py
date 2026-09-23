@@ -18,7 +18,7 @@ PLATFORM_LOGIN: dict[str, dict[str, Any]] = {
     'dazi': {'url': 'https://console.bce.baidu.com/', 'cookie': 'bce-user-info'},
     'modelscope': {'url': 'https://www.modelscope.cn/', 'cookie': 'm_session_id'},
     'minimax': {'url': 'https://agent.minimaxi.com/', 'local_storage': 'token',
-                'browser_state': 'browser/minimax.json'},
+                'web_session': True},
     'linkai': {'url': 'https://link-ai.tech/console/account', 'local_storage': 'token'},
 }
 
@@ -106,8 +106,8 @@ def browser_login(cfg, platform: str, headful: bool = False) -> int:
     inbox = Path(cfg.data_dir) / 'inbox'
     inbox.mkdir(parents=True, exist_ok=True)
     out = inbox / f'{platform}.json'
-    if spec.get('browser_state'):
-        found['browser_state'] = spec['browser_state']
+    if spec.get('web_session'):
+        found['web_session'] = True
     if sample_headers:
         found['_sample_headers'] = dict(sample_headers)
     out.write_text(json.dumps(found, ensure_ascii=False), encoding='utf-8')
