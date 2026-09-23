@@ -16,6 +16,7 @@ from app.platforms.base import Adapter, CheckinResult
 TRAE_HOST = 'https://api.trae.cn'
 STATUS_PATH = '/trae/api/v2/ug/checkin_credits/status'
 CLAIM_PATH = '/trae/api/v2/ug/checkin_credits/claim'
+ENTITLEMENT_PATH = '/trae/api/v2/pay/user_current_entitlement_list'
 
 
 class TraeAdapter(Adapter):
@@ -59,9 +60,18 @@ class TraeAdapter(Adapter):
                              f"领取失败 code={body.get('code')} {body.get('message', '')}")
 
     def credits(self, creds: dict[str, Any]) -> str | None:
-        st = self._post(creds, STATUS_PATH)
-        value = (st or {}).get('credits') if isinstance(st, dict) else None
-        return str(value) if value else None
+        # 官方余额=权益汇总 total_amount-consumed_amount（含通用+Work 两池；
+        # status.credits 只是今日签到所得，不能当余额）
+        resp = self._post(creds, ENTITLEMENT_PATH)
+        summary = (resp or {}).get('usage_summary') if isinstance(resp, dict) else None
+        if not isinstance(summary, dict):
+            return None
+        try:
+            total = int(summary.get('total_amount') or 0) - \
+                int(summary.get('consumed_amount') or 0)
+        except (TypeError, ValueError):
+            return None
+        return str(total) if total > 0 else None
 
 
 register(TraeAdapter())

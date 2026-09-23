@@ -62,6 +62,9 @@ def test_headers_cloud_ide_jwt(trae, local_server):
     assert hdrs.get('X-Device-Id') == 'D9'
 
 
-def test_credits_reads_status(trae, local_server):
-    _route_status(local_server, {'enable': True, 'credits': 150})
-    assert trae.credits({'token': 'T', 'host': local_server.base}) == '150'
+def test_credits_reads_entitlement_summary(trae, local_server):
+    # 官方余额=usage_summary.total_amount-consumed_amount（2026-09-23 实测 5450=通用2950+Work2500）
+    local_server.route(
+        'POST', '/trae/api/v2/pay/user_current_entitlement_list',
+        body={'usage_summary': {'total_amount': 5450, 'consumed_amount': 0}})
+    assert trae.credits({'token': 'T', 'host': local_server.base}) == '5450'

@@ -3,6 +3,16 @@
 遵循语义化版本（SemVer）。版本号单一来源：`app/__init__.py` 的 `__version__`；
 发版流程 = 改版本号 + 更新本文件 + `git tag vX.Y.Z` + push main 与 tags。
 
+## v1.1.1 — 2026-09-23
+
+### 修复
+- WorkBuddy 余额：原读活动接口 total_credits（=活动累计 800，非余额）。
+  改为 www.workbuddy.cn `get-user-resource-summary` 各包 CycleRemainCapacity
+  之和（实测 5026.24 与官网一致，支持小数）。
+- TraeWork 余额：原读签到 status.credits（=今日所得 150）。改为
+  `user_current_entitlement_list` usage_summary total−consumed
+  （实测 5450 = 通用 2950 + Work 2500）。
+
 ## v1.1.0 — 2026-09-23
 
 ### 新增

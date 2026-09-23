@@ -14,8 +14,10 @@ from app.platforms import register
 from app.platforms.base import Adapter, CheckinResult
 
 WB_ENDPOINT = 'https://copilot.tencent.com'
+WB_WEB_ENDPOINT = 'https://www.workbuddy.cn'
 STATUS_PATH = '/v2/billing/meter/checkin-activity-status'
 CLAIM_PATH = '/v2/billing/meter/daily-checkin'
+SUMMARY_PATH = '/billing/meter/get-user-resource-summary'
 
 
 def _dig(obj: Any, key: str) -> Any:
@@ -37,7 +39,7 @@ class WorkbuddyAdapter(Adapter):
     title = 'WorkBuddy'
     credential_kind = 'token'
 
-    def _post(self, creds: dict[str, Any], path: str) -> Any:
+    def _headers(self, creds: dict[str, Any]) -> dict[str, str]:
         token = str(creds.get('token') or '').strip()
         if not token:
             from app.http import OpError
@@ -54,8 +56,11 @@ class WorkbuddyAdapter(Adapter):
             headers['X-Tenant-Id'] = str(creds['enterprise_id'])
         if creds.get('domain'):
             headers['X-Domain'] = str(creds['domain'])
+        return headers
+
+    def _post(self, creds: dict[str, Any], path: str) -> Any:
         endpoint = str(creds.get('endpoint') or WB_ENDPOINT).rstrip('/')
-        return http_json('POST', endpoint + path, headers)
+        return http_json('POST', endpoint + path, self._headers(creds))
 
     def checkin(self, creds: dict[str, Any]) -> CheckinResult:
         st = self._post(creds, STATUS_PATH)
@@ -91,9 +96,26 @@ class WorkbuddyAdapter(Adapter):
                              f'领取失败：响应缺少 credit {str(cl)[:100]}')
 
     def credits(self, creds: dict[str, Any]) -> str | None:
-        st = self._post(creds, STATUS_PATH)
-        total = _dig(st, 'total_credits')
-        return str(total) if total else None
+        # 官方余额在 www.workbuddy.cn 的资源 summary（copilot 域下 404），
+        # = 各积分包 CycleRemainCapacity 之和（可为小数）
+        web = str(creds.get('web_endpoint') or WB_WEB_ENDPOINT).rstrip('/')
+        headers = self._headers(creds)
+        headers.update({'Origin': web, 'Referer': web + '/'})
+        resp = http_json('POST', web + SUMMARY_PATH, headers)
+        total = 0.0
+        for pack in (_dig(resp, 'Packages') or []):
+            if not isinstance(pack, dict):
+                continue
+            raw = (pack.get('CycleCapacityRemainPrecise')
+                   or pack.get('CycleRemainCapacity')
+                   or pack.get('CycleCapacityRemain') or 0)
+            try:
+                total += float(raw)
+            except (TypeError, ValueError):
+                continue
+        if not total:
+            return None
+        return str(int(total)) if total == int(total) else str(round(total, 2))
 
 
 register(WorkbuddyAdapter())

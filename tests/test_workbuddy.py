@@ -75,8 +75,24 @@ def test_headers(wb, local_server):
     assert h['X-Domain'] == 'tencent.com'
 
 
-def test_credits_total(wb, local_server):
-    local_server.route('POST', STATUS,
-                       body={'data': {'today_checked_in': True,
-                                      'total_credits': 2500}})
-    assert wb.credits(_creds(local_server)) == '2500'
+def test_credits_sums_package_remains(wb, local_server):
+    # 官方余额=www.workbuddy.cn summary 各包 CycleRemainCapacity 之和
+    # （2026-09-23 实测 4269+485.24+272=5026.24 与官网一致）
+    local_server.route('POST', '/billing/meter/get-user-resource-summary',
+                       body={'code': 0, 'data': {'Packages': [
+                           {'PackageCode': 'A', 'CycleRemainCapacity': '4269'},
+                           {'PackageCode': 'B', 'CycleRemainCapacity': '485.24'},
+                           {'PackageCode': 'C', 'CycleRemainCapacity': '272'},
+                       ]}})
+    creds = _creds(local_server)
+    creds['web_endpoint'] = local_server.base
+    assert wb.credits(creds) == '5026.24'
+
+
+def test_credits_integer_when_no_decimal(wb, local_server):
+    local_server.route('POST', '/billing/meter/get-user-resource-summary',
+                       body={'code': 0, 'data': {'Packages': [
+                           {'CycleRemainCapacity': '800'}]}})
+    creds = _creds(local_server)
+    creds['web_endpoint'] = local_server.base
+    assert wb.credits(creds) == '800'
