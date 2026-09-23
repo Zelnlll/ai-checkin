@@ -186,3 +186,16 @@ def test_aggregate_keepalive_ignores_empty(tmp_path):
     status = collect_status(cfg, store, state, PLATFORMS)
     wps = next(p for p in status['platforms'] if p['platform'] == 'wps')
     assert wps['keepalive'] == dt.date.today().isoformat()
+
+
+def test_status_accounts_expose_hash_and_uid(tmp_path):
+    import datetime as dt
+    from tests.conftest import make_jwt
+    cfg, store, state = _setup(tmp_path)
+    tok = make_jwt({'sub': '777', 'exp': int(dt.datetime.now().timestamp()) + 9999})
+    store.save('minimax', {'token': tok})
+    status = collect_status(cfg, store, state, PLATFORMS)
+    mm = next(p for p in status['platforms'] if p['platform'] == 'minimax')
+    a = mm['accounts'][0]
+    assert len(a['hash']) == 8 and a['uid'] == '777'
+    assert 'token' not in a and 'cookie' not in a   # 不回显凭证

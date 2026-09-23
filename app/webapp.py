@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import html as html_mod
 import json
 import re
@@ -59,6 +60,25 @@ def _last_done(state: DailyState, platform: str, today: str) -> str:
             label = '今天' if day == today else day
             return f'{label} {at}'.strip()
     return ''
+
+
+def _cred_fingerprint(acct: dict[str, Any]) -> tuple[str, str]:
+    """(凭证哈希, JWT uid)：供 PC 推送工具做身份路由，不回显凭证。"""
+    prim = str(acct.get('token') or acct.get('cookie') or '')
+    if not prim:
+        return '', ''
+    h = hashlib.sha1(prim.encode('utf-8')).hexdigest()[:8]
+    uid = ''
+    if prim.count('.') >= 2:
+        try:
+            import base64
+            seg = prim.split('.')[1]
+            seg += '=' * (-len(seg) % 4)
+            p = json.loads(base64.urlsafe_b64decode(seg))
+            uid = str(p.get('sub') or p.get('uid') or p.get('id') or '')
+        except Exception:
+            pass
+    return h, uid
 
 
 def _acct_key(acct: dict[str, Any], index: int) -> str:
@@ -159,10 +179,13 @@ def collect_status(cfg, store: CredentialStore, state: DailyState,
             'expiring': rec.get('expiring', ''),
             'account_note': rec.get('account_note', ''),
             'cred_warn': cred_warn,
-            'accounts': [{'id': aid, 'label': label,
-                          'cred_note': cred_notes.get(aid, ''),
-                          **recs.get(aid, {})}
-                         for aid, label in order],
+            'accounts': [dict(
+                {'id': aid, 'label': label,
+                 'cred_note': cred_notes.get(aid, ''),
+                 'hash': _cred_fingerprint(acct)[0],
+                 'uid': _cred_fingerprint(acct)[1]},
+                **recs.get(aid, {}))
+                for (aid, label), acct in zip(order, accounts)],
             'keepalive': rec.get('keepalive', ''),
             'last_done': _last_done(state, platform, today),
             'credential': credential,
