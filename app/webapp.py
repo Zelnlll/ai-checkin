@@ -48,11 +48,14 @@ _CRED_FIELDS = {
 
 
 def _last_done(state: DailyState, platform: str, today: str) -> str:
+    """最近一次成功签到：日期 + 当时执行时刻合并成一条（今天则显示「今天」）。"""
     data = state._load()
-    for day in sorted((d for d in data if d < today), reverse=True):
+    for day in sorted((d for d in data if d <= today), reverse=True):
         rec = data[day].get(platform)
         if rec and rec.get('state') in ('ok', 'already'):
-            return day
+            at = rec.get('at', '')
+            label = '今天' if day == today else day
+            return f'{label} {at}'.strip()
     return ''
 
 
@@ -76,7 +79,7 @@ def collect_status(cfg, store: CredentialStore, state: DailyState,
             'platform': platform, 'title': adapter.title,
             'state': rec.get('state', ''), 'message': rec.get('message', ''),
             'reward': rec.get('reward', ''), 'balance': rec.get('balance', ''),
-            'streak': rec.get('streak', 0), 'at': rec.get('at', ''),
+            'streak': rec.get('streak', 0),
             'keepalive': rec.get('keepalive', ''),
             'last_done': _last_done(state, platform, today),
             'credential': credential,
@@ -89,7 +92,6 @@ def _rows(p: dict[str, Any]) -> str:
             ('余额', p['balance'] or '—'),
             ('连续签到', f"{p['streak']} 天" if p['streak'] else '—'),
             ('上次签到', p['last_done'] or '—'),
-            ('上次执行', p['at'] or '—'),
             ('保活', p['keepalive'] or '—')]
     if p['state'] in ('error', 'busy') and p['message']:
         rows.append(('失败原因' if p['state'] == 'error' else '说明',

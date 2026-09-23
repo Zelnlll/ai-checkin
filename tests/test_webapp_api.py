@@ -45,7 +45,19 @@ def test_status_includes_last_done_date(tmp_path):
     state.mark('wps', CheckinResult('ok', 'x'), yesterday)
     store = CredentialStore(tmp_path, {'wps'})
     status = collect_status(None, store, state, ['wps'])
-    assert status['platforms'][0]['last_done'] == yesterday
+    last_done = status['platforms'][0]['last_done']
+    # 日期 + 当次执行时刻合并显示
+    assert last_done.startswith(f'{yesterday} ')
+    assert len(last_done.split(' ')[1]) == 8  # HH:MM:SS
+
+
+def test_last_done_shows_today_time(tmp_path):
+    state = DailyState(tmp_path)
+    today = date.today().isoformat()
+    state.mark('wps', CheckinResult('ok', 'x'), today)
+    store = CredentialStore(tmp_path, {'wps'})
+    status = collect_status(None, store, state, ['wps'])
+    assert status['platforms'][0]['last_done'].startswith('今天 ')
 
 
 def test_post_credentials_saves_and_imports(tmp_path):
