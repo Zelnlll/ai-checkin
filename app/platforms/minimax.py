@@ -98,13 +98,22 @@ class MinimaxAdapter(Adapter):
     title = 'MiniMax Code'
     credential_kind = 'token'
 
+    @staticmethod
+    def _call(creds: dict[str, Any], path: str, body: dict | None) -> Any:
+        token = str(creds.get('token') or '').strip()
+        state = str(creds.get('browser_state') or '')
+        if state:
+            from app import minimax_web
+            return minimax_web.web_request(path, body, token, state)
+        return _request(path, body, token)
+
     def checkin(self, creds: dict[str, Any]) -> CheckinResult:
         token = str(creds.get('token') or '').strip()
         if not token:
             raise OpError('缺少 token', kind='auth')
         try:
             try:
-                data = _unwrap(_request(STATUS_PATH, None, token))
+                data = _unwrap(self._call(creds, STATUS_PATH, None))
             except _BusinessError as exc:
                 return CheckinResult('error', f'查询签到状态失败：{exc.message}')
             today = next((d for d in data.get('days') or []
@@ -113,7 +122,7 @@ class MinimaxAdapter(Adapter):
             if today and int(today.get('status') or 0) == 3:
                 return CheckinResult('already', f'今日已签到（+{points} 积分）')
             try:
-                claimed = _unwrap(_request(CLAIM_PATH, {}, token))
+                claimed = _unwrap(self._call(creds, CLAIM_PATH, {}))
             except _BusinessError as exc:
                 if any(h in exc.message for h in BUSY_HINTS):
                     return CheckinResult('busy', f'服务器拥挤，稍后自动重试：{exc.message}')
@@ -130,10 +139,9 @@ class MinimaxAdapter(Adapter):
             raise
 
     def credits(self, creds: dict[str, Any]) -> str | None:
-        token = str(creds.get('token') or '').strip()
-        data = _unwrap(_request(
-            '/minimax-cloud/api/v1/credit/details?timezone_id=Asia/Shanghai',
-            None, token))
+        data = _unwrap(self._call(
+            creds, '/minimax-cloud/api/v1/credit/details?timezone_id=Asia/Shanghai',
+            None))
         today = dt.date.today().isoformat()
         total = 0
         for item in data.get('details') or []:

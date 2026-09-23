@@ -17,7 +17,8 @@ PLATFORM_LOGIN: dict[str, dict[str, Any]] = {
     'wps': {'url': 'https://lingxi.kdocs.cn/', 'cookie': 'wps_sid'},
     'dazi': {'url': 'https://console.bce.baidu.com/', 'cookie': 'bce-user-info'},
     'modelscope': {'url': 'https://www.modelscope.cn/', 'cookie': 'm_session_id'},
-    'minimax': {'url': 'https://agent.minimaxi.com/', 'local_storage': 'token'},
+    'minimax': {'url': 'https://agent.minimaxi.com/', 'local_storage': 'token',
+                'browser_state': 'browser/minimax.json'},
     'linkai': {'url': 'https://link-ai.tech/console/account', 'local_storage': 'token'},
 }
 
@@ -64,13 +65,16 @@ def browser_login(cfg, platform: str, headful: bool = False) -> int:
         ctx_kwargs = {'storage_state': str(state_file)} if state_file.exists() else {}
         context = browser.new_context(**ctx_kwargs)
         page = context.new_page()
-        # 网站实际外发的 token 头才是 API 认的那一枚（localStorage 里可能有多枚 JWT）
+        # 只认发往 /minimax-cloud/ 的 token 头（页面自家核心 API 的 JWT 网关不认）
         sent_tokens: list[str] = []
+        sample_headers: dict[str, str] = {}
 
         def _on_request(request):
-            tok = request.headers.get('token')
-            if tok and tok not in sent_tokens:
-                sent_tokens.append(tok)
+            if 'minimax-cloud' in request.url:
+                tok = request.headers.get('token')
+                if tok and tok not in sent_tokens:
+                    sent_tokens.append(tok)
+                    sample_headers.update(request.headers)
         context.on('request', _on_request)
         page.goto(spec['url'], wait_until='domcontentloaded')
         deadline = time.time() + timeout_s
@@ -102,6 +106,10 @@ def browser_login(cfg, platform: str, headful: bool = False) -> int:
     inbox = Path(cfg.data_dir) / 'inbox'
     inbox.mkdir(parents=True, exist_ok=True)
     out = inbox / f'{platform}.json'
+    if spec.get('browser_state'):
+        found['browser_state'] = spec['browser_state']
+    if sample_headers:
+        found['_sample_headers'] = dict(sample_headers)
     out.write_text(json.dumps(found, ensure_ascii=False), encoding='utf-8')
     print(f'已抓取 {platform} 凭证 → {out}')
     return 0
