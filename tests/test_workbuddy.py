@@ -102,14 +102,16 @@ def test_credits_integer_when_no_decimal(wb, local_server):
 
 def test_breakdown_lists_packages(wb, local_server):
     # 逐包明细在 paid/free-packages 两接口的 data.Accounts（含到期时间），
-    # summary 只有聚合数（2026-09-23 实测，码表源自 wb-switch credits.rs）
+    # 展示名按官方码表映射（wb-switch credit-package-names.ts，源自官方客户端
+    # package-name-resolver），未登记码回落 PackageName
     import time
     ded_far = int((time.time() + 20 * 86400) * 1000)
     ded_near = int((time.time() + 7 * 86400) * 1000)
     accounts = [
-        {'PackageName': '裂变赠送包', 'PackageCode': 'A',
+        {'PackageName': 'CodeBuddy个人版国内运营裂变包',
+         'PackageCode': 'TCACA_code_007_nzdH5h4Nl0',
          'CycleCapacityRemainPrecise': '1500', 'DeductionEndTime': ded_far},
-        {'PackageName': '签到包', 'PackageCode': 'B',
+        {'PackageName': '签到包', 'PackageCode': 'UNKNOWN_code_x',
          'CycleCapacityRemain': 100, 'DeductionEndTime': ded_near},
         {'PackageName': '空包', 'PackageCode': 'C',
          'CycleCapacityRemain': 0, 'DeductionEndTime': ded_near},
@@ -122,8 +124,9 @@ def test_breakdown_lists_packages(wb, local_server):
     creds['web_endpoint'] = local_server.base
     rows = wb.breakdown(creds)
     assert [r['amount'] for r in rows] == ['100', '1500']   # 空包剔除+失效升序
-    assert rows[0]['name'] == '签到包'
+    assert rows[0]['name'] == '签到包'          # 未登记码回落 PackageName
     assert rows[0]['tag'] == '资源包'
+    assert rows[1]['name'] == '平台奖励积分'     # 官方码表映射
     assert '7天后过期' in rows[0]['expire']
 
 

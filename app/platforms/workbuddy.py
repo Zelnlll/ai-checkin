@@ -37,6 +37,31 @@ FREE_PACKAGE_CODES = [
     'TCACA_code_040_mi9rCYg46x',
 ]
 
+# 商品码 → 官方前端文案（照抄 wb-switch credit-package-names.ts，
+# 源官方客户端 package-name-resolver；未登记码回落 PackageName）
+PACKAGE_NAMES = {
+    'TCACA_code_001_PqouKr6QWV': 'CodeBuddy 个人体验版',
+    'TCACA_code_002_AkiJS3ZHF5': '版本基础用量',
+    'TCACA_code_003_FAnt7lcmRT': 'CodeBuddy 个人标准版',
+    'TCACA_code_005_maRGyrHhw1': '版本基础用量',
+    'TCACA_code_006_DbXS0lrypC': 'CodeBuddy 个人体验版',
+    'TCACA_code_007_nzdH5h4Nl0': '平台奖励积分',
+    'TCACA_code_008_cfWoLwvjU4': '版本基础用量',
+    'TCACA_code_009_0XmEQc2xOf': '购买积分',
+    'TCACA_code_023_4xbGhMrE6q': '版本基础用量',
+    'TCACA_code_026_BaESVICNoi': '版本基础用量',
+    'TCACA_code_027_0FCGVA6vSa': '版本基础用量',
+    'TCACA_code_028_NtpWi0jzXs': '版本赠送用量',
+    'TCACA_code_029_6wCGEWquYy': '平台奖励积分',
+    'TCACA_code_030_BjSt89qTvr': '平台奖励积分',
+    'TCACA_code_035_ArVxJcGDsm': '版本基础用量',
+    'TCACA_code_036_lupO5WgNdG': '购买积分',
+    'TCACA_code_037_WxOD3MpI2o': '版本赠送用量',
+    'TCACA_code_038_OhvqZtiPKr': '购买积分',
+    'TCACA_code_039_KRcQj7wUat': '版本基础用量',
+    'TCACA_code_040_mi9rCYg46x': '版本基础用量',
+}
+
 
 def _dig(obj: Any, key: str) -> Any:
     """在可能被 data/result 包裹的响应里找字段（社区同款信封兼容）。"""
@@ -205,9 +230,11 @@ class WorkbuddyAdapter(Adapter):
             if remain <= 0:
                 continue
             exp = _expire(a)
+            code = str(a.get('PackageCode') or '')
+            name = PACKAGE_NAMES.get(code) or str(
+                a.get('PackageName') or code or '积分包')
             stamped.append((exp if exp is not None else float('inf'), {
-                'tag': '资源包',
-                'name': str(a.get('PackageName') or a.get('PackageCode') or '积分包'),
+                'tag': '资源包', 'name': name,
                 'amount': fmt_amount(remain),
                 'expire': expire_text(exp) if exp is not None else '长期有效'}))
         stamped.sort(key=lambda t: t[0])

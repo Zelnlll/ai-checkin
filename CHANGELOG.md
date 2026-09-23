@@ -3,6 +3,13 @@
 遵循语义化版本（SemVer）。版本号单一来源：`app/__init__.py` 的 `__version__`；
 发版流程 = 改版本号 + 更新本文件 + `git tag vX.Y.Z` + push main 与 tags。
 
+## v1.2.4 — 2026-09-23
+
+### 修复
+- WorkBuddy 明细包名与官方页不符：官方客户端不用后端 PackageName（运营
+  原文），按商品码映射前端文案。照抄 wb-switch credit-package-names.ts
+  码表（平台奖励积分/版本基础用量/购买积分…），未登记码回落 PackageName。
+
 ## v1.2.3 — 2026-09-23
 
 ### 新功能
