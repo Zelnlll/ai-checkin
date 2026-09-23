@@ -80,7 +80,8 @@ def _unwrap(resp: Any) -> dict[str, Any]:
     msg = str((base or {}).get('status_msg') or (resp or {}).get('message') or '请求失败')
     if code == 0:
         data = resp.get('data')
-        return data if isinstance(data, dict) else {}
+        # credit/details 等接口无 data 包裹，字段直接在顶层
+        return data if isinstance(data, dict) else resp
     if code in AUTH_STATUS_CODES:
         raise OpError(f'status_code={code} {msg}（token 失效：重开 MiniMax 客户端或重新粘贴）',
                       kind='auth')

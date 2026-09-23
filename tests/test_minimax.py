@@ -130,15 +130,15 @@ def test_missing_token_raises_auth():
 
 
 def test_credits_sums_valid_packages(mm, local_server):
-    # 真实 web 响应字段：remaining_amount(str) + expire_at_ms（2026-09-23 实测样本）
+    # 真实 web 响应：无 data 包裹，details/total_count 直接顶层（2026-09-23 实测）
     local_server.route('GET', '/minimax-cloud/api/v1/credit/details',
-                       body={"base_resp": {"status_code": 0}, "data": {"details": [
+                       body={"base_resp": {"status_code": 0}, "details": [
                            {"credit_type": 2, "granted_amount": "400.00",
                             "remaining_amount": "350.00",
                             "expire_at_ms": 4102415999000},
                            {"credit_type": 1, "remaining_amount": "50.00",
                             "expire_at_ms": 946684800000},
-                       ]}})
+                       ], "total_count": 1})
     assert mm.credits({'token': 'jwt'}) == '350'
 
 
