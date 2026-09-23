@@ -22,13 +22,26 @@ PLATFORM_LOGIN: dict[str, dict[str, Any]] = {
 }
 
 
+_JS_FIND_JWT = """() => {
+  for (const s of [window.localStorage, window.sessionStorage]) {
+    for (let i = 0; i < s.length; i++) {
+      const v = s.getItem(s.key(i));
+      if (v && v.startsWith('eyJ')) {
+        try { JSON.parse(atob(v.split('.')[1])); return v; } catch (e) {}
+      }
+    }
+  }
+  return null;
+}"""
+
+
 def _extract_state(context, page) -> dict[str, str] | None:
     creds: dict[str, str] = {}
     cookies = context.cookies()
     if cookies:
         creds['cookie'] = '; '.join(f"{c['name']}={c['value']}" for c in cookies)
     try:
-        token = page.evaluate("() => localStorage.getItem('token')")
+        token = page.evaluate(_JS_FIND_JWT)
         if token:
             creds['token'] = token
     except Exception:

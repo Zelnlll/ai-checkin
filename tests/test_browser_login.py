@@ -1,4 +1,33 @@
-from app.browser_login import _login_done
+from app.browser_login import _extract_state, _login_done
+
+
+class FakeCtx:
+    def __init__(self, cookies):
+        self._c = cookies
+
+    def cookies(self):
+        return self._c
+
+
+class FakePage:
+    def __init__(self, token):
+        self._t = token
+
+    def evaluate(self, script):
+        return self._t
+
+
+def test_extract_state_finds_jwt_token():
+    assert _extract_state(FakeCtx([]), FakePage('eyJabc')) == {'token': 'eyJabc'}
+
+
+def test_extract_state_cookie_only():
+    ctx = FakeCtx([{'name': 'a', 'value': '1'}])
+    assert _extract_state(ctx, FakePage(None)) == {'cookie': 'a=1'}
+
+
+def test_extract_state_empty_is_none():
+    assert _extract_state(FakeCtx([]), FakePage(None)) is None
 
 
 def test_cookie_type_present_and_absent():
