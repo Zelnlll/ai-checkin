@@ -3,6 +3,16 @@
 遵循语义化版本（SemVer）。版本号单一来源：`app/__init__.py` 的 `__version__`；
 发版流程 = 改版本号 + 更新本文件 + `git tag vX.Y.Z` + push main 与 tags。
 
+## v1.2.0 — 2026-09-23
+
+### 新功能
+- 点击卡片弹出「积分明细」窗（浅色控制台风格）：逐包列名称/额度/失效时间。
+  - TraeWork：entitlement 包列表（组名+描述+N天后过期，过期剔除、失效升序）
+  - MiniMax：credit/details 逐包余量+expire_at_ms
+  - WorkBuddy：资源包余量明细（官方 summary 无失效时间，显示占位）
+  - 其余平台：弹窗提示"官方接口不提供积分流水明细"
+- 新增 `Adapter.breakdown()` 钩子与 `GET /api/detail/<platform>` 接口。
+
 ## v1.1.3 — 2026-09-23
 
 ### 优化

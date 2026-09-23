@@ -204,3 +204,57 @@ def test_handler_exception_returns_json_500(tmp_path, monkeypatch):
         assert b'ok' in raised.read()
     finally:
         httpd.shutdown(); httpd.server_close()
+
+
+def test_api_detail_rows(tmp_path, monkeypatch):
+    from app.platforms import get_adapter
+    monkeypatch.setattr(get_adapter('wps'), 'breakdown', lambda creds: [
+        {'tag': '通用', 'name': '每月登录', 'amount': '500', 'expire': '7天后过期'}])
+    cfg = Config((10, 5), 3, '', tmp_path)
+    store = CredentialStore(tmp_path, {'wps'})
+    store.save('wps', {'cookie': 'wps_sid=x'})
+    httpd, base = _start_server(cfg)
+    try:
+        resp = json.loads(_get(f'{base}/api/detail/wps'))
+        assert resp['ok'] is True
+        assert resp['rows'][0]['name'] == '每月登录'
+        assert resp['title'] == 'WPS 灵犀'
+    finally:
+        httpd.shutdown()
+
+
+def test_api_detail_no_breakdown_note(tmp_path):
+    cfg = Config((10, 5), 3, '', tmp_path)
+    store = CredentialStore(tmp_path, {'wps'})
+    store.save('wps', {'cookie': 'wps_sid=x'})
+    httpd, base = _start_server(cfg)
+    try:
+        resp = json.loads(_get(f'{base}/api/detail/wps'))
+        assert resp['ok'] is True and resp['rows'] == []
+        assert '不提供' in resp['note']
+    finally:
+        httpd.shutdown()
+
+
+def test_api_detail_missing_creds(tmp_path):
+    cfg = Config((10, 5), 3, '', tmp_path)
+    httpd, base = _start_server(cfg)
+    try:
+        resp = json.loads(_get(f'{base}/api/detail/wps'))
+        assert resp['ok'] is False and '未导入' in resp['note']
+    finally:
+        httpd.shutdown()
+
+
+def test_api_detail_unknown_platform(tmp_path):
+    cfg = Config((10, 5), 3, '', tmp_path)
+    httpd, base = _start_server(cfg)
+    try:
+        req = urllib.request.Request(f'{base}/api/detail/nope')
+        try:
+            urllib.request.urlopen(req, timeout=5)
+            assert False, '应 404'
+        except urllib.error.HTTPError as e:
+            assert e.code == 404
+    finally:
+        httpd.shutdown()

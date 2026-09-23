@@ -173,6 +173,44 @@ class MinimaxAdapter(Adapter):
             return None
         return str(int(total)) if total == int(total) else str(round(total, 1))
 
+    def breakdown(self, creds: dict[str, Any]) -> list[dict[str, str]]:
+        from app.platforms.base import expire_text, fmt_amount
+        data = _unwrap(self._call(
+            creds, '/minimax-cloud/api/v1/credit/details?timezone_id=Asia/Shanghai',
+            None))
+        now = time.time()
+        today = dt.date.today().isoformat()
+        stamped: list[tuple[float, dict[str, str]]] = []
+        for item in data.get('details') or []:
+            if not isinstance(item, dict):
+                continue
+            raw = item.get('remaining_amount')
+            if raw is None:
+                raw = item.get('remain', item.get('amount'))
+            try:
+                val = float(raw or 0)
+            except (TypeError, ValueError):
+                continue
+            exp, expire = 0.0, '永久'
+            ms = item.get('expire_at_ms')
+            iso = str(item.get('expire_time') or item.get('expire_at') or '')
+            if ms is not None:
+                exp = float(ms) / 1000
+                expire = expire_text(exp)
+            elif iso[:10] >= today:
+                exp = dt.datetime.fromisoformat(iso[:10]).timestamp()
+                expire = expire_text(exp)
+            if (ms is not None or iso) and exp < now:
+                continue          # 已过期剔除
+            stamped.append((exp if exp else float('inf'), {
+                'tag': '积分', 'name': '',
+                'amount': fmt_amount(val), 'expire': expire}))
+        stamped.sort(key=lambda t: t[0])
+        rows = [row for _, row in stamped]
+        for i, row in enumerate(rows, 1):
+            row['name'] = f'积分包 {i}'
+        return rows
+
     def token_status(self, creds: dict[str, Any]) -> dict[str, Any]:
         from app.http import jwt_exp_s
         exp = jwt_exp_s(str(creds.get('token') or ''))

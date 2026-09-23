@@ -98,15 +98,17 @@ class WorkbuddyAdapter(Adapter):
                              if code is not None or msg else
                              f'领取失败：响应缺少 credit {str(cl)[:100]}')
 
-    def credits(self, creds: dict[str, Any]) -> str | None:
-        # 官方余额在 www.workbuddy.cn 的资源 summary（copilot 域下 404），
-        # = 各积分包 CycleRemainCapacity 之和（可为小数）
+    def _web_summary(self, creds: dict[str, Any]) -> Any:
+        # 官方余额在 www.workbuddy.cn 的资源 summary（copilot 域下 404）
         web = str(creds.get('web_endpoint') or WB_WEB_ENDPOINT).rstrip('/')
         headers = self._headers(creds)
         headers.update({'Origin': web, 'Referer': web + '/'})
-        resp = http_json('POST', web + SUMMARY_PATH, headers)
+        return http_json('POST', web + SUMMARY_PATH, headers)
+
+    def credits(self, creds: dict[str, Any]) -> str | None:
+        # = 各积分包 CycleRemainCapacity 之和（可为小数）
         total = 0.0
-        for pack in (_dig(resp, 'Packages') or []):
+        for pack in (_dig(self._web_summary(creds), 'Packages') or []):
             if not isinstance(pack, dict):
                 continue
             raw = (pack.get('CycleCapacityRemainPrecise')
@@ -119,6 +121,23 @@ class WorkbuddyAdapter(Adapter):
         if not total:
             return None
         return str(int(total)) if total == int(total) else str(round(total, 2))
+
+    def breakdown(self, creds: dict[str, Any]) -> list[dict[str, str]]:
+        # 官方 summary 只给逐包余量，无失效时间字段（2026-09-23 实测）
+        rows = []
+        for i, pack in enumerate(_dig(self._web_summary(creds), 'Packages') or [], 1):
+            if not isinstance(pack, dict):
+                continue
+            remain = (pack.get('CycleCapacityRemainPrecise')
+                      or pack.get('CycleRemainCapacity')
+                      or pack.get('CycleCapacityRemain'))
+            if remain in (None, '', 0, '0'):
+                continue
+            count = int(pack.get('TotalCount') or 1)
+            rows.append({'tag': f'{count}包合并' if count > 1 else '单包',
+                         'name': f'积分包 {i}',
+                         'amount': str(remain), 'expire': '—'})
+        return rows
 
 
 register(WorkbuddyAdapter())

@@ -98,3 +98,22 @@ def test_credits_integer_when_no_decimal(wb, local_server):
     creds = _creds(local_server)
     creds['web_endpoint'] = local_server.base
     assert wb.credits(creds) == '800'
+
+
+def test_breakdown_lists_packages(wb, local_server):
+    # 官方 summary 无逐包失效时间（2026-09-23 实测字段），expire 显示占位
+    local_server.route('POST', '/billing/meter/get-user-resource-summary',
+                       body={'code': 0, 'data': {'Packages': [
+                           {'PackageCode': 'TCACA_code_007_abc',
+                            'CycleRemainCapacity': '4269', 'TotalCount': 27},
+                           {'PackageCode': 'TCACA_code_008_def',
+                            'CycleRemainCapacity': '485.24', 'TotalCount': 1},
+                       ]}})
+    creds = _creds(local_server)
+    creds['web_endpoint'] = local_server.base
+    rows = wb.breakdown(creds)
+    assert rows[0]['amount'] == '4269'
+    assert rows[0]['tag'] == '27包合并'
+    assert rows[0]['name'] == '积分包 1'
+    assert rows[1]['amount'] == '485.24'
+    assert rows[0]['expire'] == '—'

@@ -2,10 +2,22 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from dataclasses import dataclass
 from typing import Any
 
 VALID_STATES = ('ok', 'already', 'busy', 'error')
+
+
+def expire_text(ts_seconds: float) -> str:
+    d = dt.date.fromtimestamp(ts_seconds)
+    n = (d - dt.date.today()).days
+    return ('今日过期' if n <= 0 else f'{n}天后过期') + f'（{d:%m-%d}）'
+
+
+def fmt_amount(value: float) -> str:
+    v = round(value, 2)
+    return str(int(v)) if v == int(v) else str(v)
 
 
 @dataclass(frozen=True)
@@ -34,6 +46,10 @@ class Adapter:
 
     def credits(self, creds: dict[str, Any]) -> str | None:
         """可选：返回可用余额展示串（如 '2592'），None=不支持。"""
+        return None
+
+    def breakdown(self, creds: dict[str, Any]) -> list[dict[str, str]] | None:
+        """可选：积分明细 [{'tag','name','amount','expire'}]，None=官方无此接口。"""
         return None
 
     def keepalive(self, creds: dict[str, Any]) -> bool:

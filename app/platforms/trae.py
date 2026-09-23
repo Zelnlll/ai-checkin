@@ -74,5 +74,28 @@ class TraeAdapter(Adapter):
             return None
         return str(total) if total > 0 else None
 
+    def breakdown(self, creds: dict[str, Any]) -> list[dict[str, str]]:
+        import time
+        from app.platforms.base import expire_text
+        resp = self._post(creds, ENTITLEMENT_PATH)
+        packs = (resp or {}).get('user_entitlement_pack_list') or [] \
+            if isinstance(resp, dict) else []
+        now = time.time()
+        stamped: list[tuple[float, dict[str, str]]] = []
+        for p in packs:
+            if not isinstance(p, dict):
+                continue
+            info = p.get('entitlement_base_info') or {}
+            quota = (info.get('quota') or {}).get('credits_limit')
+            exp = float(p.get('expire_time') or info.get('end_time') or 0)
+            if not quota or not exp or exp < now:
+                continue
+            stamped.append((exp, {
+                'tag': str(p.get('group_name') or ''),
+                'name': str(p.get('display_desc') or ''),
+                'amount': str(quota), 'expire': expire_text(exp)}))
+        stamped.sort(key=lambda t: t[0])
+        return [row for _, row in stamped]
+
 
 register(TraeAdapter())

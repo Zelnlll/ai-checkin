@@ -52,3 +52,10 @@ def test_render_html_dashboard(tmp_path):
     assert '未导入凭证' in html             # qoder 卡片状态
     assert '上次执行' not in html           # 已并入上次签到一条
     assert '上次签到' in html and '今天 ' in html
+
+
+def test_render_html_has_detail_modal(tmp_path):
+    cfg, store, state = _setup(tmp_path)
+    html = render_html(collect_status(cfg, store, state, PLATFORMS))
+    assert 'id="mask"' in html and 'showDetail(' in html
+    assert 'closeDetail' in html

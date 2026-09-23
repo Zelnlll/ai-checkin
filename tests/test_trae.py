@@ -69,3 +69,27 @@ def test_credits_reads_entitlement_summary(trae, local_server):
         'POST', '/trae/api/v2/pay/user_current_entitlement_list',
         body={'usage_summary': {'total_amount': 5450, 'consumed_amount': 0}})
     assert trae.credits({'token': 'T', 'host': local_server.base}) == '5450'
+
+
+def test_breakdown_lists_packs_sorted_by_expiry(trae, local_server):
+    import time
+    far = int(time.time()) + 29 * 86400
+    near = int(time.time()) + 7 * 86400
+    local_server.route(
+        'POST', '/trae/api/v2/pay/user_current_entitlement_list',
+        body={'user_entitlement_pack_list': [
+            {'display_desc': '老用户福利', 'group_name': '用户福利',
+             'expire_time': far,
+             'entitlement_base_info': {'quota': {'credits_limit': 2000}}},
+            {'display_desc': '每周登录奖励', 'group_name': '每月登录',
+             'expire_time': near,
+             'entitlement_base_info': {'quota': {'credits_limit': 500}}},
+            {'display_desc': '已过期包', 'group_name': '过期',
+             'expire_time': int(time.time()) - 86400,
+             'entitlement_base_info': {'quota': {'credits_limit': 999}}},
+        ]})
+    rows = trae.breakdown({'token': 'T', 'host': local_server.base})
+    assert [r['amount'] for r in rows] == ['500', '2000']   # 过期剔除+失效升序
+    assert rows[0]['name'] == '每周登录奖励'
+    assert rows[0]['tag'] == '每月登录'
+    assert '7天后过期' in rows[0]['expire']

@@ -87,6 +87,32 @@ def collect_status(cfg, store: CredentialStore, state: DailyState,
     return {'today': today, 'done': done, 'total': len(items), 'platforms': items}
 
 
+def collect_detail(store: CredentialStore, state: DailyState,
+                   platform: str) -> dict[str, Any]:
+    """卡片详情：逐包积分+失效时间（官方提供时），否则回退说明。"""
+    adapter = get_adapter(platform)
+    today = dt.date.today().isoformat()
+    rec = state.get(platform, today) or {}
+    out: dict[str, Any] = {
+        'ok': True, 'title': adapter.title, 'rows': [], 'note': '',
+        'accent': _ACCENTS.get(platform, '#6b7280'),
+        'balance': rec.get('balance', ''), 'reward': rec.get('reward', '')}
+    creds = store.load(platform)
+    if not creds:
+        out.update(ok=False, note='未导入凭证')
+        return out
+    try:
+        rows = adapter.breakdown(creds)
+    except Exception as exc:                    # noqa: BLE001 —— 弹窗兜底
+        out.update(ok=False, note=f'查询失败：{type(exc).__name__} {str(exc)[:80]}')
+        return out
+    if rows is None:
+        out['note'] = '该平台官方接口不提供积分流水明细，余额见卡片'
+    else:
+        out['rows'] = rows
+    return out
+
+
 def _rows(p: dict[str, Any]) -> str:
     rows = [('今日已得', p['reward'] or '—'),
             ('余额', p['balance'] or '—'),
@@ -110,14 +136,15 @@ def _card(p: dict[str, Any]) -> str:
         big = '未导入凭证'
     initial = p['title'][:1]
     if p['credential'] != '已导入':
-        btn = ('<a class="btn gray" href="/settings">导入凭证</a>')
+        btn = ('<a class="btn gray" href="/settings" '
+               'onclick="event.stopPropagation()">导入凭证</a>')
     elif p['state'] in ('ok', 'already'):
         btn = '<button class="btn gray" disabled>今日已签到</button>'
     else:
-        btn = (f'<button class="btn blue" onclick="doCheckin(\'{p["platform"]}\')">'
-               '立即签到</button>')
+        btn = (f'<button class="btn blue" onclick="event.stopPropagation();'
+               f'doCheckin(\'{p["platform"]}\')">立即签到</button>')
     return (
-        f'<div class="card">'
+        f'<div class="card clickable" onclick="showDetail(\'{p["platform"]}\')">'
         f'<div class="row"><span class="icon" style="background:{accent}1a;color:{accent}">'
         f'{initial}</span><span class="name">{p["title"]}</span>'
         f'<span class="pill" style="background:{bg};color:{fg}">{text}</span></div>'
@@ -156,6 +183,22 @@ body { margin:0; padding:20px; background:#f3f6f9;
 .btn.blue { background:#2563eb; color:#fff; }
 .btn.gray { background:#eef0f3; color:#9ca3af; cursor:default; }
 .foot { text-align:center; color:#9ca3af; font-size:12px; margin-top:22px; }
+.card.clickable { cursor:pointer; }
+.mask { position:fixed; inset:0; background:rgba(17,24,39,.35); display:none;
+        align-items:center; justify-content:center; z-index:50; }
+.modal { background:#fff; border-radius:14px; width:min(430px,92vw);
+         max-height:72vh; overflow:auto; padding:18px 20px;
+         box-shadow:0 8px 30px rgba(0,0,0,.18); }
+.mhead { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+.mtitle { font-size:16px; font-weight:700; flex:1; }
+.mbal { font-size:12px; color:#6b7280; }
+.mclose { color:#9ca3af; font-size:16px; cursor:pointer; padding:0 4px; }
+.mtag { font-size:11px; border-radius:7px; padding:2px 7px; white-space:nowrap; }
+.mrow { display:flex; align-items:center; gap:8px; padding:9px 2px;
+        border-bottom:1px solid #f1f2f4; font-size:13px; color:#374151; }
+.mrow .amt { margin-left:auto; font-weight:600; color:#111827; white-space:nowrap; }
+.mrow .exp { color:#6b7280; font-size:12px; text-align:right; min-width:118px; }
+.mnote { font-size:13px; color:#6b7280; padding:14px 2px; text-align:center; }
 """
 
 _JS = """
@@ -196,6 +239,28 @@ async function webLogin(p){
   const j = await r.json();
   alert(j.ok ? '登录成功，Cookie 已导入' : ('未完成：'+j.message));
 }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+async function showDetail(p){
+  const r = await fetch('/api/detail/'+p);
+  const j = await r.json();
+  const ac = j.accent || '#6b7280';
+  let h = '<div class="mhead"><span class="icon" style="background:'+ac+'1a;color:'+ac+'">'
+    + esc((j.title||'?').slice(0,1)) + '</span><span class="mtitle">' + esc(j.title)
+    + '</span><span class="mbal">余额 ' + (j.balance ? esc(j.balance) : '—')
+    + '</span><span class="mclose" onclick="closeDetail()">✕</span></div>';
+  if (j.rows && j.rows.length) {
+    h += j.rows.map(row => '<div class="mrow"><span class="mtag" style="background:'
+      + ac + '1a;color:' + ac + '">' + esc(row.tag) + '</span><span>' + esc(row.name)
+      + '</span><span class="amt">' + esc(row.amount) + '</span><span class="exp">'
+      + esc(row.expire) + '</span></div>').join('');
+  } else {
+    h += '<div class="mnote">' + esc(j.note || '暂无明细') + '</div>';
+  }
+  document.getElementById('modal').innerHTML = h;
+  document.getElementById('mask').style.display = 'flex';
+}
+function closeDetail(){ document.getElementById('mask').style.display = 'none'; }
 """
 
 
@@ -207,7 +272,7 @@ def render_html(status: dict[str, Any]) -> str:
 <title>签到中心</title><style>{_STYLE}</style><script>{_JS}</script></head>
 <body><div class="wrap">
 <div class="head"><div class="title">📋 签到中心</div>
-<div class="slogan">多个签到一目了然 · 一键完成 · <a href="/settings">设置</a></div>
+<div class="slogan">多个签到一目了然 · 点击卡片查看积分明细 · <a href="/settings">设置</a></div>
 <div class="bar"><div class="fill" style="width:{pct}%"></div></div>
 <div class="meta"><span>今日签到进度 {status['today']}</span>
 <span>已签 {status['done']} / {status['total']}</span></div></div>
@@ -216,7 +281,10 @@ def render_html(status: dict[str, Any]) -> str:
 </div>
 <div class="foot">所有签到均在服务端执行，数据来自各平台官方接口<br>
 新增签到只需在服务端加一个适配器，本页自动多出一张卡 · v{__version__}</div>
-</div></body></html>"""
+</div>
+<div class="mask" id="mask" onclick="if(event.target===this)closeDetail()">
+<div class="modal" id="modal"></div></div>
+</body></html>"""
 
 
 def render_settings(status: dict[str, Any]) -> str:
@@ -288,9 +356,15 @@ class _Handler(BaseHTTPRequestHandler):
             self._json({'ok': False, 'message': f'{type(exc).__name__}: {exc}'}, 500)
 
     def _get(self):
-        *_, status = self._status()
+        cfg, store, state, status = self._status()
         if self.path.startswith('/api/status'):
             self._json(status)
+        elif self.path.startswith('/api/detail/'):
+            platform = self.path.rpartition('/')[2]
+            if platform not in ADAPTERS:
+                self._json({'ok': False, 'note': f'未知平台 {platform}'}, 404)
+            else:
+                self._json(collect_detail(store, state, platform))
         elif self.path.startswith('/settings'):
             self._html(render_settings(status))
         else:

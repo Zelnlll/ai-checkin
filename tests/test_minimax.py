@@ -160,3 +160,22 @@ def test_token_status_works_with_jwt():
     tok = make_jwt({'exp': int(time.time()) + 864000})
     st = MinimaxAdapter().token_status({'token': tok})
     assert st['known'] is True and st['expired'] is False
+
+
+def test_breakdown_lists_packages(mm, local_server):
+    import time
+    far = int((time.time() + 29 * 86400) * 1000)
+    near = int((time.time() + 6 * 86400) * 1000)
+    local_server.route('GET', '/minimax-cloud/api/v1/credit/details',
+                       body={"base_resp": {"status_code": 0}, "details": [
+                           {"credit_type": 2, "remaining_amount": "400.00",
+                            "granted_at_ms": 1700000000000, "expire_at_ms": far},
+                           {"credit_type": 1, "remaining_amount": "50.00",
+                            "expire_at_ms": near},
+                           {"credit_type": 1, "remaining_amount": "9.00",
+                            "expire_at_ms": 946684800000},
+                       ]})
+    rows = mm.breakdown({'token': 'jwt'})
+    assert [r['amount'] for r in rows] == ['50', '400']   # 过期剔除+失效升序
+    assert '6天后过期' in rows[0]['expire']
+    assert rows[1]['name'] == '积分包 2'
