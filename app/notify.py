@@ -51,7 +51,7 @@ def build_text(outcomes: list[CheckinOutcome], today: str) -> dict[str, Any]:
 
 
 def build_textcard(outcomes: list[CheckinOutcome], today: str) -> dict[str, Any]:
-    """textcard=微信插件支持的大标题+小字明细；每平台固定色圆点，失败变红。"""
+    """textcard=微信插件支持的大标题+小字明细；行1 🔸平台+积分，行2 到期/余/连。"""
     failed = [o for o in outcomes if o.result.state == 'error']
     done = sum(1 for o in outcomes if o.result.done())
     n = len(outcomes)
@@ -65,19 +65,19 @@ def build_textcard(outcomes: list[CheckinOutcome], today: str) -> dict[str, Any]
         name = _SHORT_TITLES.get(_title(o), _title(o))
         extras = []
         if r.expiring:
-            extras.append(r.expiring)
+            extras.append(r.expiring.replace(' · ', '·'))
         if r.balance:
             extras.append(f'余{r.balance}')
         if r.streak >= 2:
             extras.append(f'连{r.streak}天')
-        text = f'{_dot(o)} {name} {detail}'
+        lines.append(f'{_dot(o)} {name} {detail}'[:40])
         if extras:
-            text += '｜' + '｜'.join(extras)
-        lines.append(text[:40])
-    rows = lines[:]
-    while len(chr(10).join(rows).encode('utf-8')) > 500 and len(rows) > 2:
-        rows.pop()
-    desc = chr(10).join(rows)
+            lines.append('　' + '｜'.join(extras))
+    while len(chr(10).join(lines).encode('utf-8')) > 500 and len(lines) > 2:
+        if lines[-1].startswith('　'):
+            lines.pop()
+        lines.pop()          # 超字节从尾部整块（平台行+明细行）删起
+    desc = chr(10).join(lines)
     return {'msgtype': 'textcard', 'textcard': {
         'title': head,
         'description': desc,

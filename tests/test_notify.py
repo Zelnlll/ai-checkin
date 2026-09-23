@@ -122,7 +122,7 @@ def test_textcard_line_shows_balance_and_streak(adapters_registered):
                                             balance='2592', streak=3)),
     ], '2026-09-22')
     d = msg['textcard']['description']
-    assert '🔸 WPS 灵犀 +100｜余2592｜连3天' in d
+    assert '🔸 WPS 灵犀 +100' in d and '　余2592｜连3天' in d
 
 
 def test_textcard_omits_absent_extras(adapters_registered):
@@ -151,7 +151,7 @@ def test_textcard_lines_fit_one_row(adapters_registered):
         CheckinOutcome('qoder', CheckinResult('ok', '成功', '+100 Credits')),
     ], '2026-09-22')
     d = msg['textcard']['description']
-    assert '🔸 MiniMax +400｜余2262｜连4天' in d   # 短名+去"积分"
+    assert '🔸 MiniMax +400' in d and '　余2262｜连4天' in d   # 短名+去积分，两行
     assert '🔸 Qoder +100' in d and 'Cr' not in d   # 单位全删
     for line in d.split(chr(10)):
         assert len(line) <= 26                     # 手机单行预算
@@ -177,9 +177,19 @@ def test_platform_icons_are_uniform_orange_diamond():
     assert '🔸' in text
 
 
-def test_textcard_row_includes_expiring():
+def test_textcard_two_line_compact_layout():
     from app.notify import build_textcard
     outcomes = [CheckinOutcome('wps', CheckinResult(
         'ok', '成', '+100 积分', '2592', 3, expiring='100 · 09-30到期'))]
     d = build_textcard(outcomes, '2026-09-23')['textcard']['description']
-    assert '09-30到期' in d
+    lines = d.split(chr(10))
+    assert lines[1].startswith('🔸') and '积分' not in lines[1]
+    assert lines[2].startswith('　')            # 第二行全角缩进对齐
+    assert '100·09-30到期｜余2592｜连3天' in lines[2]
+
+
+def test_textcard_single_line_when_no_extras():
+    from app.notify import build_textcard
+    outcomes = [CheckinOutcome('qoder', CheckinResult('ok', '成', '+100 Credits'))]
+    d = build_textcard(outcomes, '2026-09-23')['textcard']['description']
+    assert len(d.split(chr(10))) == 2           # 日期行+平台行，无第二行
