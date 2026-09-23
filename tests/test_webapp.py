@@ -132,3 +132,17 @@ def test_ghost_record_of_removed_account_ignored(tmp_path):
     status = collect_status(cfg, store2, state, PLATFORMS)
     qoder = next(p for p in status['platforms'] if p['platform'] == 'qoder')
     assert qoder['state'] == ''
+
+
+def test_dashboard_gear_entry(tmp_path):
+    cfg, store, state = _setup(tmp_path)
+    html = render_html(collect_status(cfg, store, state, PLATFORMS))
+    assert 'href="/settings"' in html and '⚙' in html
+    assert '设置' not in html.split("slogan")[1][:80]   # 旧文字链接已移除
+
+
+def test_settings_account_rows_have_update_and_meta(tmp_path):
+    cfg, store, state, today = _setup_two_accounts(tmp_path)
+    html = render_settings(collect_status(cfg, store, state, PLATFORMS))
+    assert '更新凭证' in html
+    assert 'toggleEdit(' in html and 'display:none' in html   # 表单默认收起

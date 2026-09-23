@@ -102,18 +102,21 @@ def test_settings_page_lists_platforms():
         {'platform': 'wps', 'title': 'WPS 灵犀', 'credential': '已导入'},
     ]})
     assert '设置' in html and 'WPS 灵犀' in html
-    assert 'textarea' in html and '网页登录' in html
+    assert 'textarea' in html and '添加账号' in html
+    assert '网页登录' not in html and '扫描本机' not in html
 
 
-def test_api_scan_endpoint(tmp_path, monkeypatch):
-    import app.webapp as webapp
-    monkeypatch.setattr(webapp, 'scan_local_accounts',
-                        lambda inbox, home=None: ['wps', 'qoder'])
+def test_api_scan_endpoint_removed(tmp_path):
     cfg = Config((10, 5), 3, '', tmp_path)
     httpd, base = _start_server(cfg)
     try:
-        resp = _post(f'{base}/api/scan', {})
-        assert resp['ok'] is True and resp['platforms'] == ['wps', 'qoder']
+        req = urllib.request.Request(f'{base}/api/scan', data=b'{}',
+                                     method='POST')
+        try:
+            urllib.request.urlopen(req, timeout=5)
+            assert False, '应 404'
+        except urllib.error.HTTPError as e:
+            assert e.code == 404
     finally:
         httpd.shutdown(); httpd.server_close()
 
@@ -162,24 +165,17 @@ def test_dashboard_survives_minimax_jwt_credential(tmp_path):
         httpd.shutdown(); httpd.server_close()
 
 
-def test_api_login_passes_headful_kwarg(tmp_path, monkeypatch):
-    """C2 回归：/api/login 参数名必须与 browser_login 签名一致。"""
-    import app.browser_login as bl
-    seen = {}
-
-    def fake(cfg, platform, headful=False):
-        seen['headful'] = headful
-        seen['platform'] = platform
-        return 0
-    monkeypatch.setattr(bl, 'browser_login', fake)
-    import app.webapp as webapp
-    monkeypatch.setattr(webapp, 'browser_login', fake, raising=False)
+def test_api_login_endpoint_removed(tmp_path):
     cfg = Config((10, 5), 3, '', tmp_path)
     httpd, base = _start_server(cfg)
     try:
-        resp = _post(f'{base}/api/login/wps', {})
-        assert resp['ok'] is True
-        assert seen == {'headful': False, 'platform': 'wps'}
+        req = urllib.request.Request(f'{base}/api/login/wps', data=b'{}',
+                                     method='POST')
+        try:
+            urllib.request.urlopen(req, timeout=5)
+            assert False, '应 404'
+        except urllib.error.HTTPError as e:
+            assert e.code == 404
     finally:
         httpd.shutdown(); httpd.server_close()
 

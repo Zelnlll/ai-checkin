@@ -19,7 +19,6 @@ from app import __version__
 from app.credentials import CredentialStore, sanitize_acct_id, sanitize_label
 from app.platforms import ADAPTERS, get_adapter
 from app.scheduler import fmt_num, parse_num
-from app.scanner import scan_local_accounts
 from app.state import DailyState
 
 _ACCENTS = {
@@ -34,7 +33,6 @@ _PILL = {
     'error': ('失败 ❌', '#fee2e2', '#dc2626'),
     '': ('今日未执行', '#f3f4f6', '#6b7280'),
 }
-_BROWSER_LOGIN = {'wps', 'dazi', 'minimax', 'modelscope', 'linkai'}
 # 平台 → 需要的凭证字段与提示（魔搭双入口：只填令牌也能与已存 Cookie 增量合并）
 _CRED_FIELDS = {
     'wps': [('cookie', 'Cookie 整串（含 wps_sid）')],
@@ -140,14 +138,24 @@ def collect_status(cfg, store: CredentialStore, state: DailyState,
         if rec.get('state') in ('ok', 'already'):
             done += 1
         credential = '已导入' if accounts else '未导入凭证'
-        if accounts:
-            if len(accounts) > 1:
-                credential = f'已导入·{len(accounts)}号'
-            for acct in accounts:
-                report = store.expiry_report(platform, acct, adapter)
-                if report.get('expired') or report.get('likely_expired_soon'):
-                    credential = '凭证临期/失效 ⚠'
-                    break
+        cred_notes: dict[str, str] = {}
+        for i, acct in enumerate(accounts):
+            report = store.expiry_report(platform, acct, adapter)
+            parts = []
+            if report.get('expired'):
+                parts.append('已失效 ⚠')
+            elif report.get('likely_expired_soon'):
+                parts.append('临期 ⚠')
+            elif report.get('expires_at'):
+                parts.append(f'有效至 {report["expires_at"]}')
+            saved = str(acct.get('saved_at') or '')[:10]
+            if saved:
+                parts.append(f'存于 {saved[5:]}')
+            cred_notes[_acct_key(acct, i)] = ' · '.join(parts)
+            if report.get('expired') or report.get('likely_expired_soon'):
+                credential = '凭证临期/失效 ⚠'
+        if len(accounts) > 1 and credential == '已导入':
+            credential = f'已导入·{len(accounts)}号'
         items.append({
             'platform': platform, 'title': adapter.title,
             'state': rec.get('state', ''), 'message': rec.get('message', ''),
@@ -155,7 +163,9 @@ def collect_status(cfg, store: CredentialStore, state: DailyState,
             'streak': rec.get('streak', 0),
             'expiring': rec.get('expiring', ''),
             'account_note': rec.get('account_note', ''),
-            'accounts': [{'id': aid, 'label': label, **recs.get(aid, {})}
+            'accounts': [{'id': aid, 'label': label,
+                          'cred_note': cred_notes.get(aid, ''),
+                          **recs.get(aid, {})}
                          for aid, label in order],
             'keepalive': rec.get('keepalive', ''),
             'last_done': _last_done(state, platform, today),
@@ -297,6 +307,20 @@ body { margin:0; padding:20px; background:#f3f6f9;
 .mnote { font-size:13px; color:#6b7280; padding:14px 2px; text-align:center; }
 .mgrouplabel { font-size:13px; font-weight:700; color:#374151; margin:12px 0 4px;
                border-left:3px solid #2563eb; padding-left:8px; }
+.gear { font-size:17px; text-decoration:none; background:#eef0f3; border-radius:10px;
+        width:38px; height:38px; display:flex; align-items:center; justify-content:center;
+        color:#374151; flex:none; }
+.gear:hover { background:#e2e5ea; }
+.acct { background:#f8fafc; border:1px solid #eef0f3; border-radius:10px;
+        padding:10px 12px; margin-top:10px; }
+.arow { display:flex; align-items:center; gap:8px; }
+.alabel { font-size:14px; font-weight:600; color:#111827; }
+.ameta { font-size:12px; color:#6b7280; flex:1; }
+.mini { border:1px solid #d1d5db; background:#fff; color:#374151; border-radius:7px;
+        font-size:12px; padding:4px 10px; cursor:pointer; white-space:nowrap; }
+.mini:hover { background:#f3f4f6; }
+.mini.red { color:#dc2626; border-color:#fca5a5; }
+.mini.red:hover { background:#fef2f2; }
 .msum { display:flex; gap:10px; margin:0 0 12px; }
 .msum span { flex:1; background:#f8fafc; border:1px solid #eef0f3; border-radius:10px;
              padding:8px 12px; font-size:15px; font-weight:600; color:#111827; }
@@ -322,27 +346,14 @@ async function saveCred(p,id){
   alert(j.ok ? '凭证已保存' : ('失败：'+j.message));
   if (j.ok) location.reload();
 }
-let acctSeq = 0;
-function addAcct(p, btn){
-  acctSeq++;
-  const id = 'new'+acctSeq;
-  const div = document.createElement('div');
-  div.className = 'acct';
-  let h = '<div class="row"><span class="name" style="font-size:14px">新账号'
-    + acctSeq + '（保存后可用备注改名）</span></div>';
-  const seen = new Set();
-  document.querySelectorAll('[data-p="'+p+'"]').forEach(el => {
-    const f = el.dataset.field;
-    if (f === 'label' || seen.has(f)) return;
-    seen.add(f);
-    h += '<textarea data-p="'+p+'" data-id="'+id+'" data-field="'+f
-      + '" rows="3" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;'
-      + 'border-radius:8px;padding:8px;font-size:12px;margin-top:6px"></textarea>';
-  });
-  h += '<button class="btn blue" style="margin-top:8px;width:auto;padding:8px 16px" '
-    + 'onclick="saveCred(\''+p+'\',\''+id+'\')">保存</button>';
-  div.innerHTML = h;
-  btn.parentNode.insertBefore(div, btn);
+function toggleEdit(p,id){
+  const el = document.getElementById('edit-'+p+'-'+id);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+function showNew(p){
+  const el = document.getElementById('edit-'+p+'-new');
+  el.style.display = 'block';
+  el.scrollIntoView({behavior:'smooth', block:'center'});
 }
 async function delAcct(p,id){
   if (!confirm('删除该平台该账号的凭证？')) return;
@@ -351,18 +362,6 @@ async function delAcct(p,id){
   const j = await r.json();
   alert(j.ok ? '已删除' : ('失败：'+j.message));
   location.reload();
-}
-async function scanLocal(){
-  const r = await fetch('/api/scan',{method:'POST'});
-  const j = await r.json();
-  alert(j.ok && j.platforms.length ? ('已导入：'+j.platforms.join('、')) : (j.message || '未发现可导入账号'));
-  location.reload();
-}
-async function webLogin(p){
-  alert('已发起网页登录，请稍候（最长5分钟）…');
-  const r = await fetch('/api/login/'+p,{method:'POST'});
-  const j = await r.json();
-  alert(j.ok ? '登录成功，Cookie 已导入' : ('未完成：'+j.message));
 }
 function fmtNum(v){ return Number.isInteger(v) ? v.toLocaleString('zh-CN')
   : v.toFixed(2).replace(/\.00$/, ''); }
@@ -410,8 +409,10 @@ def render_html(status: dict[str, Any]) -> str:
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>签到中心</title><style>{_STYLE}</style><script>{_JS}</script></head>
 <body><div class="wrap">
-<div class="head"><div class="title">📋 签到中心</div>
-<div class="slogan">多个签到一目了然 · 点击卡片查看积分明细 · <a href="/settings">设置</a></div>
+<div class="head"><div class="row"><div style="flex:1">
+<div class="title">📋 签到中心</div>
+<div class="slogan">多个签到一目了然 · 点击卡片查看积分明细</div></div>
+<a class="gear" href="/settings" title="设置">⚙️</a></div>
 <div class="bar"><div class="fill" style="width:{pct}%"></div></div>
 <div class="meta"><span>今日签到进度 {status['today']}</span>
 <span>已签 {status['done']} / {status['total']}</span></div></div>
@@ -426,62 +427,76 @@ def render_html(status: dict[str, Any]) -> str:
 </body></html>"""
 
 
+def _cred_form(platform: str, aid: str, fields, label: str,
+               save_text: str = '保存') -> str:
+    """一个账号的凭证编辑表单（外层默认 display:none，点开关展开）。"""
+    dom = '' if aid == 'main' else f'-{aid}'
+    inputs = '\n'.join(
+        f'<div class="slogan" style="margin:8px 0 4px">{html_mod.escape(ftxt)}</div>'
+        f'<textarea id="cred-{platform}{dom}-{fname}" data-p="{platform}" '
+        f'data-id="{aid}" data-field="{fname}" rows="3" '
+        f'placeholder="粘贴后点击{save_text}" style="width:100%;box-sizing:border-box;'
+        f'border:1px solid #d1d5db;border-radius:8px;padding:8px;font-size:12px"></textarea>'
+        for fname, ftxt in fields)
+    return (
+        '<div class="row" style="margin-top:8px"><input data-p="' + platform + '" '
+        'data-id="' + aid + '" data-field="label" placeholder="账号备注名（可选）" '
+        'value="' + html_mod.escape(label, quote=True) + '" style="flex:1;border:1px '
+        'solid #d1d5db;border-radius:8px;padding:6px 8px;font-size:13px"></div>'
+        + inputs
+        + '<button class="btn blue" style="margin-top:8px" '
+          'onclick="saveCred(\'' + platform + '\',\'' + aid + '\')">'
+        + save_text + '</button>')
+
+
 def render_settings(status: dict[str, Any]) -> str:
     blocks = []
     for p in status['platforms']:
         fields = _CRED_FIELDS.get(p['platform'], [('cookie', 'Cookie 整串')])
-        accounts = p.get('accounts') or [{'id': 'main', 'label': '主账号'}]
-        acct_html = []
+        accent = _ACCENTS.get(p['platform'], '#6b7280')
+        accounts = p.get('accounts') or [{'id': 'main', 'label': ''}]
+        rows = []
         for a in accounts:
             aid = sanitize_acct_id(a.get('id')) or 'main'
             label = sanitize_label(a.get('label'))
-            dom_id = '' if aid == 'main' else f'-{aid}'
-            inputs = '\n'.join(
-                f'<div class="slogan" style="margin:8px 0 4px">{label}</div>'
-                f'<textarea id="cred-{p["platform"]}{dom_id}-{name}" data-p="{p["platform"]}" '
-                f'data-id="{aid}" data-field="{name}" rows="3" style="width:100%;'
-                f'box-sizing:border-box;border:1px solid #d1d5db;border-radius:8px;'
-                f'padding:8px;font-size:12px"></textarea>'
-                for name, label in fields)
+            shown = label or ('主账号' if aid == 'main' else aid)
             del_btn = (
-                f'<button class="btn gray" style="margin-top:8px;width:auto;'
-                f'padding:8px 16px" '
-                f'''onclick="delAcct('{p['platform']}','{aid}')"''' '>删除该账号</button>'
+                '<button class="mini red" onclick="delAcct(\'' + p['platform']
+                + '\',\'' + aid + '\')">删除</button>'
                 if len(accounts) > 1 or aid != 'main' else '')
-            acct_html.append(
-                f'<div class="acct"><div class="row"><input data-p="{p["platform"]}" '
-                f'data-id="{aid}" data-field="label" '
-                f'placeholder="{html_mod.escape(label or aid, quote=True)}" '
-                f'style="flex:1;border:1px solid #d1d5db;border-radius:8px;'
-                f'padding:6px 8px;font-size:13px" '
-                f'value="{html_mod.escape(label, quote=True)}"></div>'
-                + inputs
-                + f'<button class="btn blue" style="margin-top:8px;width:auto;'
-                  f'padding:8px 16px" '
-                  f'''onclick="saveCred('{p['platform']}','{aid}')"''' '>保存</button>'
-                + del_btn + '</div>')
-        login_btn = (
-            f'<button class="btn blue" style="margin-top:8px;width:auto;padding:8px 16px"'
-            f''' onclick="webLogin('{p['platform']}')"''' '>网页登录获取</button>'
-            if p['platform'] in _BROWSER_LOGIN else '')
-        add_btn = (
-            f'<button class="btn gray" style="margin-top:8px;width:auto;'
-            f'padding:8px 16px" '
-            f'''onclick="addAcct('{p['platform']}", this)"''' '+ 添加账号</button>')
+            rows.append(
+                '<div class="acct"><div class="arow">'
+                '<span class="alabel">' + html_mod.escape(shown) + '</span>'
+                '<span class="ameta">'
+                + html_mod.escape(a.get('cred_note') or '未导入') + '</span>'
+                '<button class="mini" onclick="toggleEdit(\'' + p['platform']
+                + '\',\'' + aid + '\')">更新凭证</button>' + del_btn + '</div>'
+                '<div id="edit-' + p['platform'] + '-' + aid + '" '
+                'style="display:none">'
+                + _cred_form(p['platform'], aid, fields, label) + '</div></div>')
         blocks.append(
-            f'<div class="card"><div class="row"><span class="name">{p["title"]}</span>'
-            f'<span class="pill" style="background:#f3f4f6;color:#6b7280">'
-            f'{p["credential"]}</span></div>'
-            + '\n'.join(acct_html) + add_btn + login_btn + '</div>')
+            '<div class="card">'
+            '<div class="row"><span class="icon" style="background:' + accent
+            + '1a;color:' + accent + '">' + p['title'][:1] + '</span>'
+            '<span class="name">' + p['title'] + '</span>'
+            '<span class="pill" style="background:#f3f4f6;color:#6b7280">'
+            + p['credential'] + '</span></div>'
+            + '\n'.join(rows)
+            + '<div id="edit-' + p['platform'] + '-new" style="display:none" '
+            'class="acct">'
+            + _cred_form(p['platform'], 'new', fields, '', '添加') + '</div>'
+            + '<button class="btn gray" style="margin-top:10px" '
+              'onclick="showNew(\'' + p['platform'] + '\')">+ 添加账号</button>'
+            + '</div>')
     cards = '\n'.join(blocks)
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>设置 · 签到中心</title><style>{_STYLE}</style><script>{_JS}</script></head>
 <body><div class="wrap">
-<div class="head"><div class="title">⚙️ 设置</div>
-<div class="slogan">导入各平台凭证 · <a href="/">返回签到中心</a></div>
-<button class="btn blue" style="margin-top:10px;width:auto;padding:8px 16px"
- onclick="scanLocal()">🔍 扫描本机账号导入</button></div>
+<div class="head"><div class="row"><div style="flex:1">
+<div class="title">⚙️ 设置</div>
+<div class="slogan">管理各平台账号凭证 · 数据仅存本机</div></div>
+<a class="gear" href="/" title="返回签到中心">←</a></div></div>
 <div class="grid">
 {cards}
 </div></div></body></html>"""
@@ -546,11 +561,6 @@ class _Handler(BaseHTTPRequestHandler):
             payload = {}
         kind, _, platform = self.path.rpartition('/')
         head = kind.rstrip('/')
-        if self.path.startswith('/api/scan'):
-            found = scan_local_accounts(cfg.data_dir / 'inbox')
-            store.import_inbox()
-            self._json({'ok': True, 'platforms': found, 'message': '、'.join(found) or '未发现可导入账号'})
-            return
         if platform not in ADAPTERS:
             self._json({'ok': False, 'message': f'未知平台 {platform}'}, 404)
             return
@@ -580,11 +590,6 @@ class _Handler(BaseHTTPRequestHandler):
             r = outcomes[0].result
             self._json({'ok': r.state in ('ok', 'already'),
                         'state': r.state, 'message': r.message})
-        elif head.endswith('/api/login'):
-            from app.browser_login import browser_login
-            code = browser_login(cfg, platform, headful=False)
-            self._json({'ok': code == 0,
-                        'message': '成功' if code == 0 else f'退出码 {code}（可能需有头扫码）'})
         else:
             self._json({'ok': False, 'message': '未知接口'}, 404)
 
