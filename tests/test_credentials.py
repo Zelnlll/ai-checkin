@@ -237,3 +237,13 @@ def test_concurrent_upserts_all_survive(tmp_path):
         t.join()
     cookies = {a['cookie'] for a in store.load_all('wps')}
     assert len(cookies) == 21        # 20 个并发号一个不丢
+
+
+def test_upsert_label_match_updates_rotated_extra(tmp_path):
+    store = make_store(tmp_path)
+    store.save('wps', {'cookie': 'm1'})
+    store.upsert('wps', {'cookie': 'e1', 'label': '二号'})
+    # 二号 token 轮换：不带 id，凭 label 唯一匹配原位更新，不裂第三号
+    store.upsert('wps', {'cookie': 'e2', 'label': '二号'})
+    accts = store.load_all('wps')
+    assert len(accts) == 2 and accts[1]['cookie'] == 'e2'

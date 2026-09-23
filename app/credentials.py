@@ -148,6 +148,11 @@ class CredentialStore:
             elif primary:
                 target = next((a for a in accounts
                                if (a.get('token') or a.get('cookie')) == primary), None)
+                if target is None and new.get('label'):
+                    hits = [a for a in accounts
+                            if str(a.get('label') or '') == str(new['label'])]
+                    if len(hits) == 1:
+                        target = hits[0]  # 同名唯一：副账号 token 轮换原位更新
                 if target is None and rotate_single and len(accounts) == 1:
                     target = accounts[0]  # 单账号 token 刷新不建重复号
             if target is None:
