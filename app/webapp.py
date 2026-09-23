@@ -13,6 +13,7 @@ import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+from app import __version__
 from app.credentials import CredentialStore
 from app.platforms import ADAPTERS, get_adapter
 from app.scanner import scan_local_accounts
@@ -205,7 +206,7 @@ def render_html(status: dict[str, Any]) -> str:
 {cards}
 </div>
 <div class="foot">所有签到均在服务端执行，数据来自各平台官方接口<br>
-新增签到只需在服务端加一个适配器，本页自动多出一张卡</div>
+新增签到只需在服务端加一个适配器，本页自动多出一张卡 · v{__version__}</div>
 </div></body></html>"""
 
 

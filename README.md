@@ -75,8 +75,14 @@ data/
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest            # 159 项，全离线（本地回环假服务器 + 真实报文黄金样本）
+python -m pytest            # 174 项，全离线（本地回环假服务器 + 真实报文黄金样本）
 ```
+
+## 版本发布
+
+版本号单一来源：`app/__init__.py` 的 `__version__`（SemVer）。
+`python -m app.main version` 或面板页脚可查。发版 = 改版本号 + 更新
+[CHANGELOG.md](CHANGELOG.md) + `git tag vX.Y.Z` + push main 与 tags。
 
 ## 部署注意
 

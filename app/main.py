@@ -205,12 +205,17 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser('scan')
     sub.add_parser('keepalive')
     sub.add_parser('status')
+    sub.add_parser('version')
     p_web = sub.add_parser('web')
     p_web.add_argument('--port', type=int, default=8000)
     p_login = sub.add_parser('login')
     p_login.add_argument('platform')
     p_login.add_argument('--headful', action='store_true')
     args = parser.parse_args(argv)
+    if args.command == 'version':
+        from app import __version__
+        print(f'ai-checkin v{__version__}')
+        return 0
     cfg = load_config()
     if args.command == 'run-once':
         outcomes = cmd_run_once(cfg, platforms=args.platforms or None)
