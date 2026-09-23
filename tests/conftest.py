@@ -100,16 +100,23 @@ class FakeStore:
 class FakeState:
     """DailyState 替身：done=当天已完成平台集合。"""
 
-    def __init__(self, done: set[str] | None = None, streaks: dict | None = None):
+    def __init__(self, done: set[str] | None = None, streaks: dict | None = None,
+                 recs: dict | None = None):
         self._done = set(done or ())
         self._streaks = dict(streaks or {})
+        self._recs = dict(recs or {})
         self.marked: list = []
+        self.results: list = []
 
     def done_today(self, platform):
         return platform in self._done
 
     def mark(self, platform, result, day):
         self.marked.append((platform, result.state))
+        self.results.append((platform, result))
+
+    def get(self, platform, day):
+        return self._recs.get((platform, day))
 
     def streak(self, platform, day):
         return self._streaks.get(platform, 0)

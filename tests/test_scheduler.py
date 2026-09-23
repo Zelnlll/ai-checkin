@@ -49,7 +49,9 @@ def test_done_platform_persists_refreshed_balance():
             return '4321'
     ADAPTERS['stub'] = StubB()
     try:
-        state = FakeState(done={'stub'})
+        state = FakeState(done={'stub'}, recs={
+            ('stub', '2026-09-22'): {'state': 'ok', 'message': '签到成功 +400',
+                                     'reward': '+400'}})
         outcomes = run_all(['stub'], store=FakeStore({'stub': {'token': 't'}}),
                            state=state, config=FakeConfig(),
                            today='2026-09-22', now_minutes=10 * 60 + 6,
@@ -57,6 +59,9 @@ def test_done_platform_persists_refreshed_balance():
                                AssertionError('不应发签到请求')))
         assert outcomes[0].result.balance == '4321'
         assert ('stub', 'already') in state.marked
+        marked = state.results[-1][1]   # 回写不得覆盖原 state/message/reward
+        assert marked.state == 'ok' and marked.message == '签到成功 +400'
+        assert marked.reward == '+400' and marked.balance == '4321'
     finally:
         del ADAPTERS['stub']
 
