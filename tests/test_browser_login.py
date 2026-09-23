@@ -9,25 +9,17 @@ class FakeCtx:
         return self._c
 
 
-class FakePage:
-    def __init__(self, token):
-        self._t = token
-
-    def evaluate(self, script):
-        return self._t
-
-
-def test_extract_state_finds_jwt_token():
-    assert _extract_state(FakeCtx([]), FakePage('eyJabc')) == {'token': 'eyJabc'}
+def test_extract_state_uses_header_token():
+    assert _extract_state(FakeCtx([]), 'eyJhdr') == {'token': 'eyJhdr'}
 
 
 def test_extract_state_cookie_only():
     ctx = FakeCtx([{'name': 'a', 'value': '1'}])
-    assert _extract_state(ctx, FakePage(None)) == {'cookie': 'a=1'}
+    assert _extract_state(ctx) == {'cookie': 'a=1'}
 
 
 def test_extract_state_empty_is_none():
-    assert _extract_state(FakeCtx([]), FakePage(None)) is None
+    assert _extract_state(FakeCtx([]), '') is None
 
 
 def test_cookie_type_present_and_absent():

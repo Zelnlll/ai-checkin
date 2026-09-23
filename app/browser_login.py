@@ -22,30 +22,14 @@ PLATFORM_LOGIN: dict[str, dict[str, Any]] = {
 }
 
 
-_JS_FIND_JWT = """() => {
-  for (const s of [window.localStorage, window.sessionStorage]) {
-    for (let i = 0; i < s.length; i++) {
-      const v = s.getItem(s.key(i));
-      if (v && v.startsWith('eyJ')) {
-        try { JSON.parse(atob(v.split('.')[1])); return v; } catch (e) {}
-      }
-    }
-  }
-  return null;
-}"""
-
-
-def _extract_state(context, page) -> dict[str, str] | None:
+def _extract_state(context, header_token: str = '') -> dict[str, str] | None:
+    """token 一律取网站实际外发的请求头 token（与 F12 手动复制同源，杜绝抓错会话 JWT）。"""
     creds: dict[str, str] = {}
     cookies = context.cookies()
     if cookies:
         creds['cookie'] = '; '.join(f"{c['name']}={c['value']}" for c in cookies)
-    try:
-        token = page.evaluate(_JS_FIND_JWT)
-        if token:
-            creds['token'] = token
-    except Exception:
-        pass
+    if header_token:
+        creds['token'] = header_token
     return creds or None
 
 
@@ -80,11 +64,20 @@ def browser_login(cfg, platform: str, headful: bool = False) -> int:
         ctx_kwargs = {'storage_state': str(state_file)} if state_file.exists() else {}
         context = browser.new_context(**ctx_kwargs)
         page = context.new_page()
+        # 网站实际外发的 token 头才是 API 认的那一枚（localStorage 里可能有多枚 JWT）
+        sent_tokens: list[str] = []
+
+        def _on_request(request):
+            tok = request.headers.get('token')
+            if tok and tok not in sent_tokens:
+                sent_tokens.append(tok)
+        context.on('request', _on_request)
         page.goto(spec['url'], wait_until='domcontentloaded')
         deadline = time.time() + timeout_s
         found: dict[str, str] | None = None
         while time.time() < deadline:
-            creds = _extract_state(context, page)
+            creds = _extract_state(context,
+                                   sent_tokens[0] if sent_tokens else '')
             if _login_done(spec, creds):
                 found = creds
                 break
