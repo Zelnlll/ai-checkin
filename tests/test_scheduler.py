@@ -43,6 +43,32 @@ def test_done_platform_is_skipped_without_request(stub_registered):
     assert calls == []
 
 
+def test_done_platform_persists_refreshed_balance():
+    class StubB(Stub):
+        def credits(self, creds):
+            return '4321'
+    ADAPTERS['stub'] = StubB()
+    try:
+        state = FakeState(done={'stub'})
+        outcomes = run_all(['stub'], store=FakeStore({'stub': {'token': 't'}}),
+                           state=state, config=FakeConfig(),
+                           today='2026-09-22', now_minutes=10 * 60 + 6,
+                           run_platform=lambda *a: (_ for _ in ()).throw(
+                               AssertionError('不应发签到请求')))
+        assert outcomes[0].result.balance == '4321'
+        assert ('stub', 'already') in state.marked
+    finally:
+        del ADAPTERS['stub']
+
+
+def test_done_platform_no_balance_no_mark(stub_registered):
+    state = FakeState(done={'stub'})
+    run_all(['stub'], store=FakeStore({'stub': {'token': 't'}}),
+            state=state, config=FakeConfig(), today='2026-09-22',
+            now_minutes=10 * 60 + 6, run_platform=lambda *a: None)
+    assert state.marked == []   # 空余额不得把旧值抹掉
+
+
 def test_missing_credential_reports_error(stub_registered):
     def never(*a):
         raise AssertionError('run_platform 不应被调用')

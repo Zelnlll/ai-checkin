@@ -56,10 +56,13 @@ def run_all(platforms: list[str], *, store: Any, state: Any, config: Any,
     for platform in platforms:
         adapter = get_adapter(platform)
         if state.done_today(platform):
-            outcomes.append(CheckinOutcome(
-                platform, _enrich(adapter, store.load(platform) or {},
-                                  CheckinResult('already', '今日已完成，跳过'),
-                                  state, platform, today)))
+            result = _enrich(adapter, store.load(platform) or {},
+                             CheckinResult('already', '今日已完成，跳过'),
+                             state, platform, today)
+            if result.balance:
+                # 已完成平台也回写：面板/卡片的余额保持最新；空值不覆盖旧余额
+                state.mark(platform, result, today)
+            outcomes.append(CheckinOutcome(platform, result))
             continue
         creds = store.load(platform)
         if not creds:
