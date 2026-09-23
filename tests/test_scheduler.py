@@ -58,7 +58,7 @@ def test_done_platform_persists_refreshed_balance():
                            run_platform=lambda *a: (_ for _ in ()).throw(
                                AssertionError('不应发签到请求')))
         assert outcomes[0].result.balance == '4321'
-        assert ('stub', 'already') in state.marked
+        assert ('stub', 'ok') in state.marked   # 回写沿用原状态 ok，不降级成 already
         marked = state.results[-1][1]   # 回写不得覆盖原 state/message/reward
         assert marked.state == 'ok' and marked.message == '签到成功 +400'
         assert marked.reward == '+400' and marked.balance == '4321'
