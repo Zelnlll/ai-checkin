@@ -15,7 +15,7 @@ from app.credentials import CredentialStore
 from app.notify import WeComNotifier
 from app.platforms import ADAPTERS
 from app.runner import run_platform
-from app.scheduler import CheckinOutcome, run_all, should_fire
+from app.scheduler import CheckinOutcome, balance_due, run_all, should_fire
 from app.state import DailyState
 
 logger = logging.getLogger('ai-checkin')
@@ -151,11 +151,23 @@ def _write_marker(state: DailyState, content: str) -> None:
 
 
 def cmd_daemon(cfg: Config) -> None:
-    logger.info('守护模式启动：每日 %02d:%02d，重试 %d 次',
-                *cfg.checkin_time, cfg.retry_times)
+    logger.info('守护模式启动：每日 %02d:%02d，重试 %d 次，余额每 %d 分钟刷新',
+                *cfg.checkin_time, cfg.retry_times, cfg.balance_refresh_minutes)
     state = DailyState(cfg.data_dir)
+    last_balance_ts: float = 0.0   # 启动后首轮 tick 即刷新一次已有记录的余额
     while True:
         now = dt.datetime.now()
+        if balance_due(time.time(), last_balance_ts, cfg.balance_refresh_minutes):
+            last_balance_ts = time.time()
+            try:
+                from app.scheduler import run_balance
+                store = CredentialStore(cfg.data_dir, set(ADAPTERS))
+                balances = run_balance(store, DailyState(cfg.data_dir),
+                                       list(ADAPTERS), dt.date.today().isoformat())
+                if balances:
+                    logger.info('余额刷新：%s', balances)
+            except Exception:
+                logger.exception('余额刷新异常')
         marker = _read_marker(state)
         if due_to_run(now, cfg, marker):
             try:

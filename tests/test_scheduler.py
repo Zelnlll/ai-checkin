@@ -2,7 +2,7 @@ import pytest
 
 from app.platforms import ADAPTERS, get_adapter
 from app.platforms.base import Adapter, CheckinResult
-from app.scheduler import run_all, should_fire
+from app.scheduler import balance_due, run_all, run_balance, should_fire
 from tests.conftest import FakeConfig, FakeState, FakeStore
 
 
@@ -19,7 +19,7 @@ class Stub(Adapter):
 def stub_registered():
     ADAPTERS['stub'] = Stub()
     yield
-    del ADAPTERS['stub']
+    ADAPTERS.pop('stub', None)   # 测试体内可能已自行替换/删除
 
 
 def test_get_adapter_returns_registered_stub(stub_registered):
@@ -216,3 +216,62 @@ def test_streak_includes_today_on_first_checkin(cred_registered, tmp_path):
                        today=today.isoformat(), now_minutes=10 * 60 + 6,
                        run_platform=lambda a, c, cfg: CheckinResult('ok', '成功', '+1'))
     assert outcomes[0].result.streak == 2      # 昨天+今天=2
+
+
+class StubBal(Stub):
+    balance = '123'
+
+    def credits(self, creds):
+        if self.balance is None:
+            raise RuntimeError('boom')
+        return self.balance
+
+
+def test_run_balance_updates_existing_record(stub_registered):
+    ADAPTERS['stub'] = StubBal()
+    try:
+        state = FakeState(done={'stub'}, recs={
+            ('stub', '2026-09-23'): {'state': 'ok', 'message': '成功 +250',
+                                     'reward': '+250', 'balance': '500'}})
+        out = run_balance(FakeStore({'stub': {'token': 't'}}), state,
+                          ['stub'], '2026-09-23')
+        assert out == {'stub': '123'}
+        marked = state.results[-1][1]
+        assert marked.balance == '123' and marked.state == 'ok'
+        assert marked.message == '成功 +250' and marked.reward == '+250'
+    finally:
+        del ADAPTERS['stub']
+
+
+def test_run_balance_no_record_no_mark(stub_registered):
+    ADAPTERS['stub'] = StubBal()
+    try:
+        state = FakeState()          # 今日无记录：不得抢先造 done 记录破坏幂等
+        out = run_balance(FakeStore({'stub': {'token': 't'}}), state,
+                          ['stub'], '2026-09-23')
+        assert out == {'stub': '123'} and state.marked == []
+    finally:
+        del ADAPTERS['stub']
+
+
+def test_run_balance_skips_missing_creds_and_errors(stub_registered):
+    ADAPTERS['stub'] = StubBal()
+    ADAPTERS['bad'] = type('Bad', (StubBal,), {'platform': 'bad'})()
+    try:
+        state = FakeState(done={'stub'}, recs={('stub', 'd'): {'state': 'ok'}})
+        out = run_balance(FakeStore({}), state, ['stub', 'bad'], 'd')
+        assert out == {} and state.marked == []
+        ADAPTERS['stub'].balance = None   # credits 抛异常也不炸
+        state2 = FakeState(done={'stub'}, recs={('stub', 'd'): {'state': 'ok'}})
+        out = run_balance(FakeStore({'stub': {'token': 't'}}), state2,
+                          ['stub'], 'd')
+        assert out == {} and state2.marked == []
+    finally:
+        del ADAPTERS['stub']
+        del ADAPTERS['bad']
+
+
+def test_balance_due_boundaries():
+    assert not balance_due(1000, None, 60)          # 未初始化不触发
+    assert balance_due(4600, 1000, 60)
+    assert not balance_due(3000, 1000, 60)

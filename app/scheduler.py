@@ -80,3 +80,45 @@ def run_all(platforms: list[str], *, store: Any, state: Any, config: Any,
             state.mark(platform, result, today)   # 再落 enriched 值
         outcomes.append(CheckinOutcome(platform, result))
     return outcomes
+
+
+def _write_balance(state: Any, adapter: Any, creds: dict,
+                   platform: str, today: str) -> str | None:
+    """查询余额并回写今日记录（仅当记录已存在；保留原状态/文案，不破坏幂等）。"""
+    try:
+        value = adapter.credits(creds)
+    except Exception:
+        return None
+    if not value:
+        return None
+    rec = state.get(platform, today)
+    if rec:
+        state.mark(platform, CheckinResult(
+            rec.get('state', 'ok'), rec.get('message', ''),
+            rec.get('reward', ''), balance=str(value),
+            streak=int(rec.get('streak') or 0)), today)
+    return str(value)
+
+
+def run_balance(store: Any, state: Any, platforms: list[str],
+                today: str) -> dict[str, str]:
+    """余额循环刷新：只发各平台 credits() 轻量 GET（兼作保活），不碰签到端点。"""
+    out: dict[str, str] = {}
+    for platform in platforms:
+        creds = store.load(platform)
+        if not creds:
+            continue
+        try:
+            adapter = get_adapter(platform)
+        except Exception:
+            continue
+        value = _write_balance(state, adapter, creds, platform, today)
+        if value:
+            out[platform] = value
+    return out
+
+
+def balance_due(now_ts: float, last_ts: float | None, minutes: int) -> bool:
+    if last_ts is None or minutes <= 0:
+        return False
+    return (now_ts - last_ts) / 60 >= minutes

@@ -33,3 +33,9 @@ def test_negative_retry_times_rejected():
 def test_non_numeric_retry_times_rejected():
     with pytest.raises(ValueError):
         load_config({'RETRY_TIMES': 'abc'})
+
+
+def test_balance_refresh_default_and_override():
+    assert load_config({}).balance_refresh_minutes == 60
+    assert load_config(
+        {'BALANCE_REFRESH_MINUTES': '15'}).balance_refresh_minutes == 15
