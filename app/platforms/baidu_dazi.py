@@ -106,6 +106,14 @@ class BaiduDaziAdapter(Adapter):
         url = (f'{DUMATE_BASE}/api/dumate/points/quota_overview'
                '?timezone=Asia/Shanghai&clientType=desktop&ignoreLoginBonus=true')
         result = _unwrap(http_json('GET', url, _headers(str(creds.get('cookie') or ''))))
+        top = (result or {}).get('totalPoints')
+        if top:
+            try:
+                value = int(float(top)) - int(float(
+                    (result or {}).get('usedPoints') or 0))
+                return str(value) if value > 0 else None
+            except (TypeError, ValueError):
+                pass
         total = sum(int(i.get('totalPoints') or 0)
                     for i in (result or {}).get('subscription') or []
                     if isinstance(i, dict))

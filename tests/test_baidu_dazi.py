@@ -83,6 +83,17 @@ def test_business_code_is_error_not_auth(dazi, local_server):
     assert r.state == 'error' and '50001' in r.message
 
 
+def test_credits_uses_top_level_total_points(dazi, local_server):
+    # 真实响应（2026-09-23 实测）：result.totalPoints 顶层字符串，subscription 可为空
+    local_server.route('GET', '/api/dumate/points/quota_overview', body={
+        'code': 0, 'success': True, 'result': {
+            'isSubscribed': False, 'usedPoints': '0.00',
+            'totalPoints': '500.00', 'subscription': [],
+            'incremental': [{'totalPoints': '500.00', 'usedPoints': '0.00',
+                             'status': 'active'}]}})
+    assert dazi.credits({'cookie': COOKIE}) == '500'
+
+
 def test_credits_sums_subscription(dazi, local_server):
     local_server.route('GET', '/api/dumate/points/quota_overview',
                        body={"code": 0, "result": {"subscription":
