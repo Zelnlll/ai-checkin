@@ -107,6 +107,7 @@ class FakeState:
         self._recs = dict(recs or {})
         self.marked: list = []
         self.results: list = []
+        self.balances: list = []
 
     def done_today(self, platform):
         return platform in self._done
@@ -114,6 +115,9 @@ class FakeState:
     def mark(self, platform, result, day):
         self.marked.append((platform, result.state))
         self.results.append((platform, result))
+
+    def set_balance(self, platform, day, balance):
+        self.balances.append((platform, balance))
 
     def get(self, platform, day):
         return self._recs.get((platform, day))

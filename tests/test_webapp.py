@@ -35,6 +35,13 @@ def test_collect_status_fields(tmp_path):
     assert qoder['credential'] == '未导入凭证' and qoder['state'] == ''
 
 
+def test_error_card_shows_reason(tmp_path):
+    cfg, store, state = _setup(tmp_path)
+    state.mark('qoder', CheckinResult('error', '870 真拒签'), state_today())
+    html = render_html(collect_status(cfg, store, state, PLATFORMS))
+    assert '870 真拒签' in html and '失败' in html
+
+
 def test_render_html_dashboard(tmp_path):
     cfg, store, state = _setup(tmp_path)
     html = render_html(collect_status(cfg, store, state, PLATFORMS))

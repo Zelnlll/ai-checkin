@@ -87,6 +87,9 @@ def _rows(p: dict[str, Any]) -> str:
             ('上次签到', p['last_done'] or '—'),
             ('上次执行', p['at'] or '—'),
             ('保活', p['keepalive'] or '—')]
+    if p['state'] in ('error', 'busy') and p['message']:
+        rows.append(('失败原因' if p['state'] == 'error' else '说明',
+                     p['message']))
     return '\n'.join(
         f'<div class="kv"><span>{k}</span><span>{v}</span></div>' for k, v in rows)
 

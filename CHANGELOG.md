@@ -3,6 +3,23 @@
 遵循语义化版本（SemVer）。版本号单一来源：`app/__init__.py` 的 `__version__`；
 发版流程 = 改版本号 + 更新本文件 + `git tag vX.Y.Z` + push main 与 tags。
 
+## v1.0.1 — 2026-09-23
+
+面板数据正确性修复（用户截图审查发现）。
+
+### 修复
+- **余额刷新伪造签到状态**：`_write_balance` 对无状态记录默认 `state:'ok'`，
+  把 LinkAI 一整天的 870 真拒签掩盖成"已签到"并导致当天跳过重试。
+  现改为 `DailyState.set_balance()` 只合并 balance 字段，绝不触碰 state/at。
+- **「上次执行」被余额刷新污染**：余额回写不再更新 `at`，该字段恢复"最近一次
+  签到执行"语义。
+- **失败状态从不落盘**：run_all 现把 error/busy 也写入 state.json，
+  面板卡片新增「失败原因」行（busy 为「说明」），失败不再只在日志里。
+- **余额循环补打保活标记**：credits 成功即 touch_keepalive（兑现"兼作保活"），
+  修复搭子保活恒"—"。
+- MiniMax credits 字段映射（remaining_amount/expire_at_ms + 无 data 包裹响应）。
+- 搭子余额改读顶层 `totalPoints - usedPoints`（subscription 常为空）。
+
 ## v1.0.0 — 2026-09-23
 
 首个正式版本，NAS 生产环境已运行。

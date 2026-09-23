@@ -77,3 +77,23 @@ def test_mark_persists_balance_and_streak(tmp_path):
             '2026-09-22')
     rec = st.get('wps', '2026-09-22')
     assert rec['balance'] == '2592' and rec['streak'] == 3
+
+
+def test_set_balance_merges_without_touching_state_or_at(tmp_path):
+    st = DailyState(tmp_path)
+    st.mark('wps', CheckinResult('error', '870 真拒签'), TODAY)
+    before = st.get('wps', TODAY)
+    st.set_balance('wps', TODAY, '500')
+    after = st.get('wps', TODAY)
+    assert after['balance'] == '500'
+    assert after['state'] == 'error' and after['message'] == '870 真拒签'
+    assert after['at'] == before['at']      # 上次执行时刻不被余额刷新污染
+    assert not st.done_today('wps')
+
+
+def test_set_balance_creates_balance_only_record(tmp_path):
+    st = DailyState(tmp_path)
+    st.set_balance('qoder', TODAY, '9')
+    rec = st.get('qoder', TODAY)
+    assert rec == {'balance': '9'}
+    assert not st.done_today('qoder')       # 绝不因余额写入变成"已完成"

@@ -89,6 +89,14 @@ class DailyState:
             rec['keepalive'] = day
             self._save(data)
 
+    def set_balance(self, platform: str, day: str, balance: str) -> None:
+        """只合并 balance 字段：绝不触碰 state/at，防止余额刷新伪造签到状态。"""
+        with self._locked():
+            data = self._load()
+            rec = data.setdefault(day, {}).setdefault(platform, {})
+            rec['balance'] = str(balance)
+            self._save(data)
+
     def streak(self, platform: str, day: str) -> int:
         """连续签到天数：day 当天未签则从昨天往前数。"""
         data = self._load()

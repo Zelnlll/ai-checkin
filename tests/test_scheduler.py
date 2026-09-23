@@ -43,35 +43,24 @@ def test_done_platform_is_skipped_without_request(stub_registered):
     assert calls == []
 
 
-def test_done_platform_persists_refreshed_balance():
+def test_done_platform_skip_refreshes_balance_without_mark():
     class StubB(Stub):
         def credits(self, creds):
             return '4321'
     ADAPTERS['stub'] = StubB()
     try:
-        state = FakeState(done={'stub'}, recs={
-            ('stub', '2026-09-22'): {'state': 'ok', 'message': '签到成功 +400',
-                                     'reward': '+400'}})
+        state = FakeState(done={'stub'})
         outcomes = run_all(['stub'], store=FakeStore({'stub': {'token': 't'}}),
                            state=state, config=FakeConfig(),
                            today='2026-09-22', now_minutes=10 * 60 + 6,
                            run_platform=lambda *a: (_ for _ in ()).throw(
                                AssertionError('不应发签到请求')))
         assert outcomes[0].result.balance == '4321'
-        assert ('stub', 'ok') in state.marked   # 回写沿用原状态 ok，不降级成 already
-        marked = state.results[-1][1]   # 回写不得覆盖原 state/message/reward
-        assert marked.state == 'ok' and marked.message == '签到成功 +400'
-        assert marked.reward == '+400' and marked.balance == '4321'
+        assert state.balances == [('stub', '4321')]
+        assert state.results == []      # 绝不 mark：不伪造/覆盖 state 与 at
+        assert ('stub', 'keepalive') in state.marked
     finally:
         del ADAPTERS['stub']
-
-
-def test_done_platform_no_balance_no_mark(stub_registered):
-    state = FakeState(done={'stub'})
-    run_all(['stub'], store=FakeStore({'stub': {'token': 't'}}),
-            state=state, config=FakeConfig(), today='2026-09-22',
-            now_minutes=10 * 60 + 6, run_platform=lambda *a: None)
-    assert state.marked == []   # 空余额不得把旧值抹掉
 
 
 def test_missing_credential_reports_error(stub_registered):
@@ -95,14 +84,15 @@ def test_pending_platform_runs_and_marks_state(stub_registered):
     assert [m[1] for m in state.marked] == ['ok', 'ok']   # I5：mark→enrich→再 mark
 
 
-def test_failed_platform_is_not_marked_done(stub_registered):
+def test_failed_platform_marked_but_not_done(stub_registered):
     state = FakeState()
     outcomes = run_all(['stub'], store=FakeStore({'stub': {'token': 't'}}),
                        state=state, config=FakeConfig(),
                        today='2026-09-22', now_minutes=10 * 60 + 6,
                        run_platform=lambda adapter, creds, cfg: CheckinResult('error', 'HTTP 500'))
     assert outcomes[0].result.state == 'error'
-    assert state.marked == []
+    assert state.marked == [('stub', 'error')]   # 失败落盘供面板显示原因
+    assert not state.done_today('stub')          # 但绝不算"已完成"
 
 
 class Cred(Adapter):
@@ -227,48 +217,33 @@ class StubBal(Stub):
         return self.balance
 
 
-def test_run_balance_updates_existing_record(stub_registered):
+def test_run_balance_writes_balance_and_keepalive(stub_registered):
     ADAPTERS['stub'] = StubBal()
     try:
-        state = FakeState(done={'stub'}, recs={
-            ('stub', '2026-09-23'): {'state': 'ok', 'message': '成功 +250',
-                                     'reward': '+250', 'balance': '500'}})
+        state = FakeState()
         out = run_balance(FakeStore({'stub': {'token': 't'}}), state,
                           ['stub'], '2026-09-23')
         assert out == {'stub': '123'}
-        marked = state.results[-1][1]
-        assert marked.balance == '123' and marked.state == 'ok'
-        assert marked.message == '成功 +250' and marked.reward == '+250'
-    finally:
-        del ADAPTERS['stub']
-
-
-def test_run_balance_no_record_no_mark(stub_registered):
-    ADAPTERS['stub'] = StubBal()
-    try:
-        state = FakeState()          # 今日无记录：不得抢先造 done 记录破坏幂等
-        out = run_balance(FakeStore({'stub': {'token': 't'}}), state,
-                          ['stub'], '2026-09-23')
-        assert out == {'stub': '123'} and state.marked == []
+        assert state.balances == [('stub', '123')]
+        assert state.results == []              # 绝不伪造 state
+        assert ('stub', 'keepalive') in state.marked
     finally:
         del ADAPTERS['stub']
 
 
 def test_run_balance_skips_missing_creds_and_errors(stub_registered):
     ADAPTERS['stub'] = StubBal()
-    ADAPTERS['bad'] = type('Bad', (StubBal,), {'platform': 'bad'})()
     try:
-        state = FakeState(done={'stub'}, recs={('stub', 'd'): {'state': 'ok'}})
-        out = run_balance(FakeStore({}), state, ['stub', 'bad'], 'd')
-        assert out == {} and state.marked == []
+        state = FakeState()
+        out = run_balance(FakeStore({}), state, ['stub', 'nosuch'], 'd')
+        assert out == {} and state.balances == []
         ADAPTERS['stub'].balance = None   # credits 抛异常也不炸
-        state2 = FakeState(done={'stub'}, recs={('stub', 'd'): {'state': 'ok'}})
+        state2 = FakeState()
         out = run_balance(FakeStore({'stub': {'token': 't'}}), state2,
                           ['stub'], 'd')
-        assert out == {} and state2.marked == []
+        assert out == {} and state2.balances == []
     finally:
         del ADAPTERS['stub']
-        del ADAPTERS['bad']
 
 
 def test_balance_due_boundaries():
