@@ -3,6 +3,26 @@
 遵循语义化版本（SemVer）。版本号单一来源：`app/__init__.py` 的 `__version__`；
 发版流程 = 改版本号 + 更新本文件 + `git tag vX.Y.Z` + push main 与 tags。
 
+## v1.4.8 — 2026-09-23
+
+### 修复：全量代码评审（多账号系列改动）
+后端：
+- 凭证 upsert/remove 读改写全程持锁（原锁只包写，双容器并发丢账号）；
+  未持锁不再 rmdir 别人的锁；state/credentials tmp 文件加 pid 防互踩。
+- 空仓库首次 inbox 导入 id='main'（防 state 键错位清零连签）。
+- 聚合求和改为单位一致才加（'+100 积分'+'10 Credits' 不再混算成 110）。
+- earliest_of：'即将过期' 视为最急；MM-DD 早于今天按明年算（跨年修正）。
+- expiring 缓存语义：平台支持明细但已无过期项时清空旧值（原来永驻）。
+- inbox 并发双导入 replace 幂等。
+面板：
+- 卡片明细行/大数字/标题全部 html.escape（上游错误文本可携带 HTML，
+  实测存储型 XSS 已封堵）。
+- 凭证临期不再把卡打成「未导入凭证」：credential 与 cred_warn 拆字段，
+  临期显示为状态胶囊追加 ⚠。
+- 弹窗请求序号防乱序覆盖；keepalive 聚合先滤空再取最早。
+- POST 强制 application/json（挡 text/plain 跨域简单请求）；
+  仅改备注名（label-only）允许保存。
+
 ## v1.4.7 — 2026-09-23
 
 ### 优化：积分明细弹窗重做

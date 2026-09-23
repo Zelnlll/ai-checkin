@@ -125,10 +125,13 @@ def test_ghost_record_of_removed_account_ignored(tmp_path):
     import datetime as dt
     cfg, store, state = _setup(tmp_path)
     # 先以"未导入凭证"落 main 错误记录，再导入哈希 id 账号 → 卡片不应钉死失败
-    state.mark('qoder', CheckinResult('error', '未导入凭证（Qoder）'),
-               dt.date.today().isoformat())
     store2 = CredentialStore(tmp_path, set(PLATFORMS))
     store2.upsert('qoder', {'token': 'dt-new'})
+    store2.upsert('qoder', {'token': 'dt-2'})
+    second = [a['id'] for a in store2.load_all('qoder') if a['id'] != 'main'][0]
+    state.mark('qoder', CheckinResult('error', '二号失败'),
+               dt.date.today().isoformat(), account=second)
+    store2.remove('qoder', second)          # 删号后其记录不得钉死卡片
     status = collect_status(cfg, store2, state, PLATFORMS)
     qoder = next(p for p in status['platforms'] if p['platform'] == 'qoder')
     assert qoder['state'] == ''
@@ -154,3 +157,32 @@ def test_detail_modal_uses_tabs_and_ellipsis(tmp_path):
     assert 'class="mtab"' in html.replace("'", "'") or 'mtab' in html   # 账号标签页
     assert 'text-overflow:ellipsis' in html                              # 长名省略
     assert 'showGroup(' in html                                          # 切换函数
+
+
+def test_dashboard_escapes_hostile_message(tmp_path):
+    import datetime as dt
+    cfg, store, state = _setup(tmp_path)
+    state.mark('qoder', CheckinResult('error', '<img src=x onerror=alert(1)>'),
+               dt.date.today().isoformat())
+    html = render_html(collect_status(cfg, store, state, PLATFORMS))
+    assert '<img src=x' not in html
+
+
+def test_expiring_soon_keeps_card_data(tmp_path):
+    cfg, store, state = _setup(tmp_path)
+    status = collect_status(cfg, store, state, PLATFORMS)
+    wps = next(p for p in status['platforms'] if p['platform'] == 'wps')
+    assert wps['credential'].startswith('已导入')
+    html = render_html(status)
+    assert '2592' in html                    # 临期不得把卡打成"未导入凭证"
+
+
+def test_aggregate_keepalive_ignores_empty(tmp_path):
+    import datetime as dt
+    cfg, store, state = _setup(tmp_path)
+    state.touch_keepalive('wps', dt.date.today().isoformat())
+    state.mark('wps', CheckinResult('ok', '二'), dt.date.today().isoformat(),
+               account='x2')
+    status = collect_status(cfg, store, state, PLATFORMS)
+    wps = next(p for p in status['platforms'] if p['platform'] == 'wps')
+    assert wps['keepalive'] == dt.date.today().isoformat()

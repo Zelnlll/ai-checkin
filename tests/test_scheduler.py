@@ -367,3 +367,32 @@ def test_run_all_attaches_earliest_expiring(stub_registered):
     assert out[0].result.expiring == '100 · 09-30到期'
     assert ('stub', '100 · 09-30到期') in state.expirings
     assert ('stub#x2', '50 · 10-13到期') in state.expirings
+
+
+def test_earliest_of_handles_relative_and_year():
+    from app.scheduler import earliest_of
+    # 即将过期 排最前
+    assert earliest_of(['100 · 12-31到期', '50 即将过期']) == '50 即将过期'
+    # 跨年：今天9月，12-31 比明年01-05 更早
+    assert earliest_of(['50 · 01-05到期', '100 · 12-31到期']) == '100 · 12-31到期'
+
+
+def test_aggregate_mixed_units_not_summed():
+    from app.scheduler import _aggregate
+    agg = _aggregate('t', [('main', '主账号', CheckinResult('ok', 'x', '+100 积分', '2592')),
+                           ('x2', '小号', CheckinResult('ok', 'x', '+10 Credits', '10'))])
+    assert '110' not in agg.reward          # 单位不同禁止混加
+    assert agg.reward                       # 透传可显示
+
+
+def test_expiring_cleared_when_no_expiry_rows(stub_registered):
+    class StubEmpty(Stub):
+        def breakdown(self, creds):
+            return []
+    ADAPTERS['stub'] = StubEmpty()
+    try:
+        state = FakeState()
+        run_balance(FakeStore({'stub': {'token': 't'}}), state, ['stub'], 'd')
+        assert state.expirings == [('stub', '')]   # 支持明细但已无过期项→清空
+    finally:
+        del ADAPTERS['stub']

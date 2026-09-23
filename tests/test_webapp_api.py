@@ -110,8 +110,9 @@ def test_api_scan_endpoint_removed(tmp_path):
     cfg = Config((10, 5), 3, '', tmp_path)
     httpd, base = _start_server(cfg)
     try:
-        req = urllib.request.Request(f'{base}/api/scan', data=b'{}',
-                                     method='POST')
+        req = urllib.request.Request(
+            f'{base}/api/scan', data=b'{}',
+            headers={'Content-Type': 'application/json'}, method='POST')
         try:
             urllib.request.urlopen(req, timeout=5)
             assert False, '应 404'
@@ -169,8 +170,9 @@ def test_api_login_endpoint_removed(tmp_path):
     cfg = Config((10, 5), 3, '', tmp_path)
     httpd, base = _start_server(cfg)
     try:
-        req = urllib.request.Request(f'{base}/api/login/wps', data=b'{}',
-                                     method='POST')
+        req = urllib.request.Request(
+            f'{base}/api/login/wps', data=b'{}',
+            headers={'Content-Type': 'application/json'}, method='POST')
         try:
             urllib.request.urlopen(req, timeout=5)
             assert False, '应 404'

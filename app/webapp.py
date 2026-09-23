@@ -105,7 +105,8 @@ def _aggregate_recs(recs: dict[str, dict], order: list[tuple[str, str]]) -> dict
         'balance': _sum_field([r.get('balance', '') for _, _, r in seq]),
         'expiring': earliest_of([r.get('expiring', '') for _, _, r in seq]),
         'streak': main_rec.get('streak', 0),
-        'keepalive': min((r.get('keepalive', '') for _, _, r in seq), default=''),
+        'keepalive': min([r.get('keepalive', '') for _, _, r in seq
+                          if r.get('keepalive')], default=''),
         'at': max((r.get('at', '') for _, _, r in seq), default=''),
         'account_note': f'{n} 账号',
     }
@@ -129,6 +130,7 @@ def collect_status(cfg, store: CredentialStore, state: DailyState,
         if rec.get('state') in ('ok', 'already'):
             done += 1
         credential = '已导入' if accounts else '未导入凭证'
+        cred_warn = False
         cred_notes: dict[str, str] = {}
         for i, acct in enumerate(accounts):
             report = store.expiry_report(platform, acct, adapter)
@@ -144,8 +146,8 @@ def collect_status(cfg, store: CredentialStore, state: DailyState,
                 parts.append(f'存于 {saved[5:]}')
             cred_notes[_acct_key(acct, i)] = ' · '.join(parts)
             if report.get('expired') or report.get('likely_expired_soon'):
-                credential = '凭证临期/失效 ⚠'
-        if len(accounts) > 1 and credential == '已导入':
+                cred_warn = True
+        if len(accounts) > 1:
             credential = f'已导入·{len(accounts)}号'
         items.append({
             'platform': platform, 'title': adapter.title,
@@ -154,6 +156,7 @@ def collect_status(cfg, store: CredentialStore, state: DailyState,
             'streak': rec.get('streak', 0),
             'expiring': rec.get('expiring', ''),
             'account_note': rec.get('account_note', ''),
+            'cred_warn': cred_warn,
             'accounts': [{'id': aid, 'label': label,
                           'cred_note': cred_notes.get(aid, ''),
                           **recs.get(aid, {})}
@@ -215,7 +218,8 @@ def _rows(p: dict[str, Any]) -> str:
         rows.append(('失败原因' if p['state'] == 'error' else '说明',
                      p['message']))
     return '\n'.join(
-        f'<div class="kv"><span>{k}</span><span>{v}</span></div>' for k, v in rows)
+        f'<div class="kv"><span>{k}</span>'
+        f'<span>{html_mod.escape(str(v))}</span></div>' for k, v in rows)
 
 
 def _card(p: dict[str, Any]) -> str:
@@ -242,9 +246,9 @@ def _card(p: dict[str, Any]) -> str:
     return (
         f'<div class="card clickable" onclick="showDetail(\'{p["platform"]}\')">'
         f'<div class="row"><span class="icon" style="background:{accent}1a;color:{accent}">'
-        f'{initial}</span><span class="name">{p["title"]}</span>'
+        f'{initial}</span><span class="name">{html_mod.escape(p["title"])}</span>'
         f'<span class="pill" style="background:{bg};color:{fg}">{text}</span></div>'
-        f'<div class="big" style="color:{accent}">{big}</div>'
+        f'<div class="big" style="color:{accent}">{html_mod.escape(str(big))}</div>'
         f'<div class="kvwrap">{_rows(p)}</div>{btn}</div>'
     )
 
@@ -361,10 +365,13 @@ function fmtNum(v){ return Number.isInteger(v) ? v.toLocaleString('zh-CN')
   : v.toFixed(2).replace(/\.00$/, ''); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-let _det = null;
+let _det = null, _detSeq = 0;
 async function showDetail(p){
+  const s = ++_detSeq;
   const r = await fetch('/api/detail/'+p);
-  _det = await r.json();
+  const j0 = await r.json();
+  if (s !== _detSeq) return;            // 慢的旧响应不许覆盖新弹窗
+  _det = j0;
   const j = _det, ac = j.accent || '#6b7280';
   let h = '<div class="mhead"><span class="icon" style="background:'+ac+'1a;color:'+ac+'">'
     + esc((j.title||'?').slice(0,1)) + '</span><span class="mtitle">' + esc(j.title)
@@ -490,7 +497,8 @@ def render_settings(status: dict[str, Any]) -> str:
             + '1a;color:' + accent + '">' + p['title'][:1] + '</span>'
             '<span class="name">' + p['title'] + '</span>'
             '<span class="pill" style="background:#f3f4f6;color:#6b7280">'
-            + p['credential'] + '</span></div>'
+            + p['credential']
+            + (' ⚠' if p.get('cred_warn') else '') + '</span></div>'
             + '\n'.join(rows)
             + '<div id="edit-' + p['platform'] + '-new" style="display:none" '
             'class="acct">'
@@ -563,6 +571,10 @@ class _Handler(BaseHTTPRequestHandler):
             self._json({'ok': False, 'message': f'{type(exc).__name__}: {exc}'}, 500)
 
     def _post(self):
+        ctype = (self.headers.get('Content-Type') or '').lower()
+        if 'application/json' not in ctype:
+            self._json({'ok': False, 'message': '需要 application/json'}, 415)
+            return
         cfg, store, state, _ = self._status()
         length = min(int(self.headers.get('Content-Length') or 0), 1024 * 1024)
         try:
@@ -585,10 +597,12 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             fields = {k: v for k, v in payload.items()
                       if v not in ('', None) and k != 'id'}
-            if not (fields.get('cookie') or fields.get('token')):
-                self._json({'ok': False, 'message': '需提供 cookie 或 token 字段'})
-                return
             acct_id = payload.get('id')
+            if not (fields.get('cookie') or fields.get('token')):
+                ok_label = acct_id and fields.get('label') and                     len(fields) == 1
+                if not ok_label:
+                    self._json({'ok': False, 'message': '需提供 cookie 或 token 字段'})
+                    return
             if acct_id and str(acct_id).startswith('new'):
                 acct_id = None            # 前端占位 id：由服务端按凭证哈希建号
             store.upsert(platform, fields, acct_id=acct_id)

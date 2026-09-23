@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import hashlib
 import json
@@ -61,13 +62,17 @@ class CredentialStore:
         accounts = self.load_all(platform)
         return accounts[0] if accounts else None
 
-    def _save_accounts(self, platform: str, accounts: list[dict[str, Any]]) -> None:
+    @contextlib.contextmanager
+    def _locked(self):
+        """凭证目录跨进程锁；未持锁不许 rmdir，避免偷删别人的锁。"""
         self._cred_dir.mkdir(parents=True, exist_ok=True)
         lock = self._cred_dir / '.lock'
         deadline = time.time() + 5
+        held = False
         while True:
             try:
                 os.mkdir(lock)
+                held = True
                 break
             except FileExistsError:
                 try:
@@ -80,15 +85,24 @@ class CredentialStore:
                     break          # 拿不到锁也工作：宁可冒竞态不冒停摆
                 time.sleep(0.05)
         try:
-            tmp = self._file(platform).with_suffix('.json.tmp')
-            tmp.write_text(json.dumps({'accounts': accounts}, ensure_ascii=False,
-                                      indent=1), encoding='utf-8')
-            tmp.replace(self._file(platform))
+            yield
         finally:
-            try:
-                os.rmdir(lock)
-            except OSError:
-                pass
+            if held:
+                try:
+                    os.rmdir(lock)
+                except OSError:
+                    pass
+
+    def _write(self, platform: str, accounts: list[dict[str, Any]]) -> None:
+        target = self._file(platform)
+        tmp = target.with_name(f'{target.name}.{os.getpid()}.tmp')
+        tmp.write_text(json.dumps({'accounts': accounts}, ensure_ascii=False,
+                                  indent=1), encoding='utf-8')
+        tmp.replace(target)
+
+    def _save_accounts(self, platform: str, accounts: list[dict[str, Any]]) -> None:
+        with self._locked():
+            self._write(platform, accounts)
 
     def save(self, platform: str, creds: dict[str, Any],
              saved_at: str | None = None) -> None:
@@ -100,54 +114,60 @@ class CredentialStore:
     def upsert(self, platform: str, creds: dict[str, Any],
                acct_id: str | None = None,
                rotate_single: bool = False) -> None:
-        """更新或追加账号：显式 id > 主凭证相同 > 新增。
+        """更新或追加账号：显式 id > 主凭证相同 > 新增。读改写全程持锁。
 
         rotate_single=True（inbox 导入用）：仅有一个账号且不匹配时视为该账号
         凭证轮换并合并——PC 端扫描/登录工具导出的永远是本机那一个账号。
         """
-        accounts = self.load_all(platform)
         new = dict(creds)
         acct_id = sanitize_acct_id(acct_id)
         if 'label' in new:
             new['label'] = sanitize_label(new['label'])
         now = dt.datetime.now().isoformat(timespec='seconds')
         primary = new.get('token') or new.get('cookie')
+        with self._locked():
+            accounts = self.load_all(platform)
 
-        def _merge(target: dict[str, Any]) -> None:
-            changed = any(target.get(k) != new.get(k)
-                          for k in ('cookie', 'token', 'csrf'))
-            target.update({k: v for k, v in new.items() if k != 'saved_at'})
-            target['saved_at'] = target.get('saved_at') if not changed else now
-            target.setdefault('saved_at', now)
+            def _merge(target: dict[str, Any]) -> None:
+                changed = any(target.get(k) != new.get(k)
+                              for k in ('cookie', 'token', 'csrf'))
+                target.update({k: v for k, v in new.items() if k != 'saved_at'})
+                target['saved_at'] = target.get('saved_at') if not changed else now
+                target.setdefault('saved_at', now)
 
-        target = None
-        if acct_id:
-            target = next((a for a in accounts if a.get('id') == acct_id), None)
-        elif primary:
-            target = next((a for a in accounts
-                           if (a.get('token') or a.get('cookie')) == primary), None)
-            if target is None and rotate_single and len(accounts) == 1:
-                target = accounts[0]      # 单账号 token 刷新不建重复号
-        if target is None:
+            target = None
             if acct_id:
-                new['id'] = acct_id       # 显式指定 id：按其建号
+                target = next((a for a in accounts if a.get('id') == acct_id), None)
+            elif primary:
+                target = next((a for a in accounts
+                               if (a.get('token') or a.get('cookie')) == primary), None)
+                if target is None and rotate_single and len(accounts) == 1:
+                    target = accounts[0]  # 单账号 token 刷新不建重复号
+            if target is None:
+                if acct_id:
+                    new['id'] = acct_id       # 显式指定 id：按其建号
+                elif not accounts:
+                    new['id'] = 'main'        # 空仓库首账号：main，state 旧键零迁移
+                else:
+                    new.setdefault('id', _acct_id(new) if primary
+                                   else f'a{len(accounts) + 1}')
+                new.setdefault('saved_at', now)
+                accounts.append(new)
             else:
-                new.setdefault('id', _acct_id(new) if primary else f'a{len(accounts) + 1}')
-            new.setdefault('saved_at', now)
-            accounts.append(new)
-        else:
-            _merge(target)
-        self._save_accounts(platform, accounts)
+                _merge(target)
+            self._write(platform, accounts)
 
     def remove(self, platform: str, acct_id: str | None = None) -> None:
         if not acct_id:
             self.clear(platform)
             return
-        accounts = [a for a in self.load_all(platform) if a.get('id') != acct_id]
-        if accounts:
-            self._save_accounts(platform, accounts)
-        else:
-            self.clear(platform)
+        with self._locked():
+            accounts = [a for a in self.load_all(platform)
+                        if a.get('id') != acct_id]
+            if accounts:
+                self._write(platform, accounts)
+                return
+        self.clear(platform)
 
     def clear(self, platform: str) -> dict[str, Any]:
         for p in (self._file(platform),
@@ -175,7 +195,10 @@ class CredentialStore:
             if not isinstance(data, dict) or not (data.get('cookie') or data.get('token')):
                 continue
             self.upsert(platform, data, rotate_single=True)
-            path.replace(path.with_suffix('.json.imported'))  # 覆盖旧档，重复导入不炸
+            try:
+                path.replace(path.with_suffix('.json.imported'))  # 并发双导入幂等
+            except FileNotFoundError:
+                pass
             imported.append((platform, path.name))
         return imported
 

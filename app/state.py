@@ -31,9 +31,11 @@ class DailyState:
         lock = self._file.with_suffix('.lock')
         lock.parent.mkdir(parents=True, exist_ok=True)
         deadline = time.time() + 5
+        held = False
         while True:
             try:
                 os.mkdir(lock)
+                held = True
                 break
             except FileExistsError:
                 try:
@@ -48,10 +50,11 @@ class DailyState:
         try:
             yield
         finally:
-            try:
-                os.rmdir(lock)
-            except OSError:
-                pass
+            if held:               # 未持锁不许删别人的锁
+                try:
+                    os.rmdir(lock)
+                except OSError:
+                    pass
 
     def _load(self) -> dict[str, dict[str, dict[str, Any]]]:
         try:
@@ -64,7 +67,7 @@ class DailyState:
 
     def _save(self, data: dict) -> None:
         self._file.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self._file.with_suffix('.json.tmp')
+        tmp = self._file.with_name(f'{self._file.name}.{os.getpid()}.tmp')
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding='utf-8')
         tmp.replace(self._file)
 

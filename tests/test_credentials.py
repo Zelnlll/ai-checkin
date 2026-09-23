@@ -207,3 +207,18 @@ def test_upsert_sanitizes_label_and_illegal_id(tmp_path):
     assert '<' not in accts[0]['label'] and '"' not in accts[0]['label']
     assert all(a['id'].isalnum() or set(a['id']) <= set('_-')
                for a in accts)
+
+
+def test_first_inbox_import_gets_main_id(tmp_path):
+    store = make_store(tmp_path)
+    (tmp_path / 'inbox' / 'wps.json').write_text('{"cookie": "c"}', encoding='utf-8')
+    store.import_inbox()
+    assert store.load_all('wps')[0]['id'] == 'main'
+
+
+def test_inbox_replace_twice_is_idempotent(tmp_path):
+    store = make_store(tmp_path)
+    (tmp_path / 'inbox' / 'wps.json').write_text('{"cookie": "c"}', encoding='utf-8')
+    store.import_inbox()
+    # 模拟并发：文件已被改名，再跑一轮不许抛
+    store.import_inbox()

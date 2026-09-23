@@ -40,13 +40,19 @@ def _acct_label(acct: dict[str, Any], index: int) -> str:
     return str(acct.get('label') or ('主账号' if index == 0 else f'账号{index + 1}'))
 
 
+def _unit(text: str) -> str:
+    return re.sub(r'[+\d.,\s]', '', str(text))
+
+
 def _aggregate(platform_title: str,
                per: list[tuple[str, str, CheckinResult]]) -> CheckinResult:
     """per: [(acct_id, label, result)] → 平台聚合结果。"""
     results = [r for _, _, r in per]
     states = [r.state for r in results]
-    rewards = [n for r in results if (n := parse_num(r.reward)) is not None]
-    balances = [n for r in results if (n := parse_num(r.balance)) is not None]
+    reward_src = [r.reward for r in results if r.reward
+                  and parse_num(r.reward) is not None]
+    bal_src = [r.balance for r in results if r.balance
+               and parse_num(r.balance) is not None]
     if all(s in ('ok', 'already') for s in states):
         state = 'ok' if any(s == 'ok' for s in states) else 'already'
         word = '全部完成'
@@ -61,13 +67,22 @@ def _aggregate(platform_title: str,
     else:
         message = (f'{n_ok}/{len(states)} 账号{word}'
                    + (f'（{"；".join(fails)[:120]}）' if fails else ''))
-    reward = ''
-    if len(per) == 1:
-        reward = results[0].reward
-    elif rewards:
-        reward = f'+{fmt_num(sum(rewards))} 积分'
+
+    def _sum(vals: list[str], prefix: str = '') -> str | None:
+        """单位一致才求和；混单位透传第一个（不造假数字）。"""
+        if not vals:
+            return None
+        units = {_unit(v) for v in vals}
+        if len(units) > 1:
+            return None
+        nums = [n for n in (parse_num(v) for v in vals) if n is not None]
+        u = next(iter(units))
+        return f'{prefix}{fmt_num(sum(nums))}' + (f' {u}' if u and prefix else '')
+
+    reward = results[0].reward if len(per) == 1 else (
+        _sum(reward_src, '+') or (reward_src[0] if reward_src else ''))
     balance = results[0].balance if len(per) == 1 else (
-        fmt_num(sum(balances)) if balances else '')
+        _sum(bal_src) or (bal_src[0] if bal_src else ''))
     return CheckinResult(state, message, reward, balance, results[0].streak,
                          expiring=earliest_of([r.expiring for r in results]))
 
@@ -140,20 +155,35 @@ def _streak(state: Any, platform: str, today: str,
 
 def _cache_expiring(state: Any, adapter: Any, creds: dict,
                     platform: str, today: str, account: str) -> str:
-    """算最快到期积分→缓存进 state（set_expiring 只合并该字段）；失败返回 ''。"""
-    exp = _earliest_expiring(adapter, creds) or ''
-    if exp:
-        state.set_expiring(platform, today, exp, account)
+    """算最快到期积分→缓存进 state（set_expiring 只合并该字段）。
+
+    None（不支持/查询失败）不动缓存；''（无过期项）清空旧缓存。
+    """
+    exp = _earliest_expiring(adapter, creds)
+    if exp is None:
+        return ''
+    state.set_expiring(platform, today, exp, account)
     return exp
 
 
 def earliest_of(vals: list[str]) -> str:
-    """多个 '100 · 09-30到期' 取日期最早；无值返回 ''。"""
-    import re as _re
+    """多个 '100 · 09-30到期' 取真实最早；'即将过期' 视为最急；无值 ''。"""
+    import datetime as _dt
 
-    def key(e: str) -> str:
-        m = _re.search(r'·\s*([\d-]+)到期', e)
-        return m.group(1) if m else '9999'
+    def key(e: str) -> _dt.date:
+        if '即将过期' in e:
+            return _dt.date(1970, 1, 1)
+        m = re.search(r'·\s*(\d{1,2})-(\d{1,2})到期', e)
+        if not m:
+            return _dt.date(2999, 1, 1)
+        today = _dt.date.today()
+        try:
+            cand = _dt.date(today.year, int(m.group(1)), int(m.group(2)))
+        except ValueError:
+            cand = _dt.date(today.year, int(m.group(1)), 28)
+        if cand < today:                   # MM-DD 已过 → 明年
+            cand = _dt.date(today.year + 1, cand.month, cand.day)
+        return cand
     got = [e for e in vals if e]
     return min(got, key=key) if got else ''
 
@@ -200,10 +230,16 @@ def run_all(platforms: list[str], *, store: Any, state: Any, config: Any,
 
 
 def _earliest_expiring(adapter: Any, creds: dict) -> str | None:
-    """明细里最快过期的积分包：'100 · 10-01到期'；无明细/无过期项=None。"""
+    """明细里最快过期的积分包：'100 · 10-01到期'。
+
+    返回 None=该平台不支持明细/查询失败（调用方不得清缓存）；
+    返回 ''=支持但已无带到期时间的积分（调用方应清空旧缓存）。
+    """
     try:
-        rows = adapter.breakdown(creds) or []
+        rows = adapter.breakdown(creds)
     except Exception:                        # noqa: BLE001 —— 明细失败不影响余额轮
+        return None
+    if rows is None:
         return None
     for row in rows:                         # breakdown 已按失效时间升序
         exp = str(row.get('expire', ''))
@@ -212,7 +248,7 @@ def _earliest_expiring(adapter: Any, creds: dict) -> str | None:
         date = exp.split('（')[-1].rstrip('）') if '（' in exp else ''
         amount = row.get('amount', '')
         return f'{amount} · {date}到期' if date else f'{amount} 即将过期'
-    return None
+    return ''
 
 
 def run_balance(store: Any, state: Any, platforms: list[str],
@@ -233,9 +269,7 @@ def run_balance(store: Any, state: Any, platforms: list[str],
             value = _refresh_balance(state, adapter, acct, platform, today, key)
             if value:
                 values.append(value)
-            expiring = _earliest_expiring(adapter, acct)
-            if expiring:
-                state.set_expiring(platform, today, expiring, key)
+            _cache_expiring(state, adapter, acct, platform, today, key)
         if len(values) == 1:
             out[platform] = values[0]
         elif values:
