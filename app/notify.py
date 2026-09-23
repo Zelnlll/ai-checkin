@@ -12,14 +12,12 @@ from app.scheduler import CheckinOutcome
 
 logger = logging.getLogger(__name__)
 
-# 通知行首统一菱形；尽量沿用各平台主色（emoji 无红/紫/绿菱形，取近色或单色）
-_PLATFORM_DOT = {'wps': '◆', 'dazi': '🔷', 'minimax': '💠',
-                 'qoder': '🔶', 'modelscope': '❖', 'linkai': '◇',
-                 'workbuddy': '🔹', 'trae': '🔸'}
+# 通知行首统一同款菱形：全平台 🔸 小橙菱，失败 🔻 红色警示
+_DOT = '🔸'
 
 
 def _dot(o: CheckinOutcome) -> str:
-    return '🔻' if o.result.state == 'error' else _PLATFORM_DOT.get(o.platform, '◇')
+    return '🔻' if o.result.state == 'error' else _DOT
 
 
 _SHORT_TITLES = {'MiniMax Code': 'MiniMax'}
