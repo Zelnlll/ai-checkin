@@ -12,13 +12,14 @@ from app.scheduler import CheckinOutcome
 
 logger = logging.getLogger(__name__)
 
-_PLATFORM_DOT = {'wps': '🟢', 'dazi': '🔵', 'minimax': '🟣',
-                 'qoder': '🟡', 'modelscope': '🟠', 'linkai': '⚪',
+# 通知行首统一菱形；尽量沿用各平台主色（emoji 无红/紫/绿菱形，取近色或单色）
+_PLATFORM_DOT = {'wps': '◆', 'dazi': '🔷', 'minimax': '💠',
+                 'qoder': '🔶', 'modelscope': '❖', 'linkai': '◇',
                  'workbuddy': '🔹', 'trae': '🔸'}
 
 
 def _dot(o: CheckinOutcome) -> str:
-    return '🔴' if o.result.state == 'error' else _PLATFORM_DOT.get(o.platform, '⚪')
+    return '🔻' if o.result.state == 'error' else _PLATFORM_DOT.get(o.platform, '◇')
 
 
 _SHORT_TITLES = {'MiniMax Code': 'MiniMax'}

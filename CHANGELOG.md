@@ -3,6 +3,13 @@
 遵循语义化版本（SemVer）。版本号单一来源：`app/__init__.py` 的 `__version__`；
 发版流程 = 改版本号 + 更新本文件 + `git tag vX.Y.Z` + push main 与 tags。
 
+## v1.4.1 — 2026-09-23
+
+### 优化
+- 通知行首图标全部改菱形：wps◆ dazi🔷 minimax💠 qoder🔶 魔搭❖ linkai◇
+  workbuddy🔹 trae🔸（emoji 无红/紫/绿菱形，取近色或单色，互不重复）；
+  失败标记 🔴→🔻 保持红色警示。
+
 ## v1.4.0 — 2026-09-23
 
 ### 优化：设置页重做
