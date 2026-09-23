@@ -6,6 +6,8 @@ import argparse
 import datetime as dt
 import json
 import logging
+import os
+import threading
 import time
 from pathlib import Path
 from typing import Callable
@@ -150,9 +152,24 @@ def _write_marker(state: DailyState, content: str) -> None:
     tmp.replace(f)
 
 
+def _start_panel(cfg: Config, port: int):
+    """同进程起面板 HTTP 服务（守护线程），返回 httpd 便于测试/关停。"""
+    from app.webapp import serve_app
+    httpd = serve_app(cfg, port)
+    threading.Thread(target=httpd.serve_forever, daemon=True,
+                     name='panel').start()
+    return httpd
+
+
 def cmd_daemon(cfg: Config) -> None:
     logger.info('守护模式启动：每日 %02d:%02d，重试 %d 次，余额每 %d 分钟刷新',
                 *cfg.checkin_time, cfg.retry_times, cfg.balance_refresh_minutes)
+    panel_port = int(os.environ.get('PANEL_PORT', '8000'))
+    try:
+        _start_panel(cfg, panel_port)
+        logger.info('面板已随守护启动：http://0.0.0.0:%d', panel_port)
+    except OSError as exc:
+        logger.error('面板端口 %d 占用，仅运行守护： %s', panel_port, exc)
     state = DailyState(cfg.data_dir)
     last_balance_ts: float = 0.0   # 启动后首轮 tick 即刷新一次已有记录的余额
     while True:

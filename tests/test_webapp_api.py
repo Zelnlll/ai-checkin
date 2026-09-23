@@ -336,3 +336,35 @@ def test_settings_page_lists_accounts(tmp_path):
         assert '主账号' in html and '小号' in html and '添加账号' in html
     finally:
         httpd.shutdown()
+
+
+def test_start_panel_serves_status(tmp_path):
+    import json as _json
+    import urllib.request
+    from app.main import _start_panel
+    cfg = Config((10, 5), 3, '', tmp_path)
+    httpd = _start_panel(cfg, 0)
+    port = httpd.server_address[1]
+    try:
+        with urllib.request.urlopen(f'http://127.0.0.1:{port}/api/status',
+                                    timeout=5) as r:
+            assert r.status == 200
+            assert _json.loads(r.read())['total'] >= 0
+    finally:
+        httpd.shutdown(); httpd.server_close()
+
+
+def test_daemon_starts_panel(monkeypatch, tmp_path):
+    import app.main as m
+    started = {}
+    monkeypatch.setattr(m, '_start_panel',
+                        lambda cfg, port: started.setdefault('port', port))
+    monkeypatch.setattr(m, '_read_marker', lambda state: '9999-12-31 23:59')
+    monkeypatch.setattr(m.time, 'sleep', lambda s: (_ for _ in ()).throw(
+        KeyboardInterrupt()))
+    cfg = Config((10, 5), 3, '', tmp_path)
+    try:
+        m.cmd_daemon(cfg)
+    except KeyboardInterrupt:
+        pass
+    assert started.get('port') == 8000

@@ -3,6 +3,14 @@
 遵循语义化版本（SemVer）。版本号单一来源：`app/__init__.py` 的 `__version__`；
 发版流程 = 改版本号 + 更新本文件 + `git tag vX.Y.Z` + push main 与 tags。
 
+## v1.5.0 — 2026-09-23
+
+### 变更：面板与守护合并为单容器
+- `cmd_daemon` 启动时同进程拉起面板线程（`_start_panel`，端口
+  `PANEL_PORT` 默认 8000；端口被占只降级为纯守护不崩）。
+- compose 删去 ai-checkin-web 服务，8000 端口映射并入 ai-checkin；
+  回滚方法以注释保留在 compose 内。`web` 子命令仍在（独立跑面板用）。
+
 ## v1.4.8 — 2026-09-23
 
 ### 修复：全量代码评审（多账号系列改动）
