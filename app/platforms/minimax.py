@@ -103,7 +103,8 @@ class MinimaxAdapter(Adapter):
         token = str(creds.get('token') or '').strip()
         if creds.get('web_session'):
             from app import minimax_web
-            return minimax_web.web_request(path, body, token)
+            return minimax_web.web_request(path, body, token,
+                                           str(creds.get('user_id') or ''))
         return _request(path, body, token)
 
     def checkin(self, creds: dict[str, Any]) -> CheckinResult:

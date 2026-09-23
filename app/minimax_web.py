@@ -9,7 +9,6 @@ desktop token（F12/客户端）继续走 app.platforms.minimax 的极简 query�
 
 from __future__ import annotations
 
-import base64
 import json
 import time
 from urllib.parse import quote, urlencode
@@ -20,18 +19,11 @@ from app.platforms.minimax import MINIMAX_BASE, _JS_UNRESERVED, minimax_headers
 BASE = MINIMAX_BASE
 
 
-def _jwt_user_id(token: str) -> str:
-    try:
-        p = token.split('.')[1]
-        p += '=' * (-len(p) % 4)
-        return str(json.loads(base64.urlsafe_b64decode(p))['user']['id'])
-    except Exception:
-        return '0'
-
-
-def build_web_path(path: str, token: str, now_ms: int | None = None) -> str:
+def build_web_path(path: str, token: str, user_id: str,
+                   now_ms: int | None = None) -> str:
     now_ms = now_ms if now_ms is not None else int(time.time() * 1000)
-    # 参数集合与顺序需与 web 前端一致；unix 出现两次、token 挂在 query 上
+    # 参数集合与顺序需与 web 前端一致；unix 出现两次、token 挂在 query 上。
+    # user_id 必须是账号 realUserID（服务端与 token 配对校验，取错恒 401）
     params = [
         ('device_platform', 'web'), ('biz_id', '3'), ('app_id', '3001'),
         ('version_code', '22201'), ('unix', str(now_ms)),
@@ -39,7 +31,7 @@ def build_web_path(path: str, token: str, now_ms: int | None = None) -> str:
         ('sys_language', 'zh'), ('lang', 'zh'), ('uuid', 'null'),
         ('device_id', '51489187'), ('os_name', 'Windows'),
         ('browser_name', 'Chrome'), ('browser_language', 'zh-CN'),
-        ('browser_platform', 'Win32'), ('user_id', _jwt_user_id(token)),
+        ('browser_platform', 'Win32'), ('user_id', user_id),
         ('op_ticket', 'undefined'), ('screen_width', '1280'),
         ('screen_height', '720'), ('unix', str(now_ms)), ('token', token),
     ]
@@ -47,10 +39,12 @@ def build_web_path(path: str, token: str, now_ms: int | None = None) -> str:
         urlencode(params, quote_via=quote, safe=_JS_UNRESERVED)
 
 
-def web_request(path: str, body: dict | None, token: str,
+def web_request(path: str, body: dict | None, token: str, user_id: str,
                 now_ms: int | None = None) -> dict:
+    if not user_id:
+        raise OpError('缺 user_id(realUserID)：用 login minimax 重新抓取', kind='auth')
     now_ms = now_ms if now_ms is not None else int(time.time() * 1000)
-    path_q = build_web_path(path, token, now_ms)
+    path_q = build_web_path(path, token, user_id, now_ms)
     body_str = json.dumps(body, ensure_ascii=False) if body is not None else ''
     h = minimax_headers(token, path_q, body_str,
                         ts=str(now_ms // 1000), ms=str(now_ms))

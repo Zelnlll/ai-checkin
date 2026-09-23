@@ -68,6 +68,7 @@ def browser_login(cfg, platform: str, headful: bool = False) -> int:
         # 只认发往 /minimax-cloud/ 的 token 头（页面自家核心 API 的 JWT 网关不认）
         sent_tokens: list[str] = []
         sample_headers: dict[str, str] = {}
+        captured: dict[str, str] = {}
 
         def _on_request(request):
             if 'minimax-cloud' in request.url:
@@ -75,6 +76,10 @@ def browser_login(cfg, platform: str, headful: bool = False) -> int:
                 if tok and tok not in sent_tokens:
                     sent_tokens.append(tok)
                     sample_headers.update(request.headers)
+                from urllib.parse import parse_qs, urlparse
+                uid = parse_qs(urlparse(request.url).query).get('user_id')
+                if uid and uid[0] not in ('', 'undefined'):
+                    captured.setdefault('user_id', uid[0])
         context.on('request', _on_request)
         page.goto(spec['url'], wait_until='domcontentloaded')
         deadline = time.time() + timeout_s
@@ -108,6 +113,7 @@ def browser_login(cfg, platform: str, headful: bool = False) -> int:
     out = inbox / f'{platform}.json'
     if spec.get('web_session'):
         found['web_session'] = True
+        found.update(captured)
     if sample_headers:
         found['_sample_headers'] = dict(sample_headers)
     out.write_text(json.dumps(found, ensure_ascii=False), encoding='utf-8')
