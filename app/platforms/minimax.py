@@ -143,15 +143,33 @@ class MinimaxAdapter(Adapter):
             creds, '/minimax-cloud/api/v1/credit/details?timezone_id=Asia/Shanghai',
             None))
         today = dt.date.today().isoformat()
-        total = 0
+        total = 0.0
         for item in data.get('details') or []:
             if not isinstance(item, dict):
                 continue
-            expire = str(item.get('expire_time') or item.get('expire_at') or '')
-            if expire and expire[:10] < today:
+            exp_ms = item.get('expire_at_ms')
+            if exp_ms is not None:
+                try:
+                    if float(exp_ms) / 1000 < time.time():
+                        continue
+                except (TypeError, ValueError):
+                    continue
+            else:
+                expire = str(item.get('expire_time') or item.get('expire_at') or '')
+                if expire and expire[:10] < today:
+                    continue
+            raw = item.get('remaining_amount')
+            if raw is None:
+                raw = item.get('remain')
+            if raw is None:
+                raw = item.get('amount')
+            try:
+                total += float(raw or 0)
+            except (TypeError, ValueError):
                 continue
-            total += int(item.get('remain') or item.get('amount') or 0)
-        return str(total) if total else None
+        if not total:
+            return None
+        return str(int(total)) if total == int(total) else str(round(total, 1))
 
     def token_status(self, creds: dict[str, Any]) -> dict[str, Any]:
         from app.http import jwt_exp_s

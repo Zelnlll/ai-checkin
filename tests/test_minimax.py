@@ -130,6 +130,19 @@ def test_missing_token_raises_auth():
 
 
 def test_credits_sums_valid_packages(mm, local_server):
+    # 真实 web 响应字段：remaining_amount(str) + expire_at_ms（2026-09-23 实测样本）
+    local_server.route('GET', '/minimax-cloud/api/v1/credit/details',
+                       body={"base_resp": {"status_code": 0}, "data": {"details": [
+                           {"credit_type": 2, "granted_amount": "400.00",
+                            "remaining_amount": "350.00",
+                            "expire_at_ms": 4102415999000},
+                           {"credit_type": 1, "remaining_amount": "50.00",
+                            "expire_at_ms": 946684800000},
+                       ]}})
+    assert mm.credits({'token': 'jwt'}) == '350'
+
+
+def test_credits_legacy_fields_compat(mm, local_server):
     local_server.route('GET', '/minimax-cloud/api/v1/credit/details',
                        body={"base_resp": {"status_code": 0}, "data": {"details": [
                            {"amount": 100, "remain": 80,
