@@ -71,6 +71,7 @@ def test_status_3_is_already_without_claim(mm, local_server):
                        body=_status_body(3))
     r = mm.checkin({'token': 'jwt'})
     assert r.state == 'already' and '400' in r.message
+    assert r.reward == '+400 积分'      # 面板"今日已得"读 reward
     assert [x for x in local_server.received if x['method'] == 'POST'] == []
 
 

@@ -3,6 +3,13 @@
 遵循语义化版本（SemVer）。版本号单一来源：`app/__init__.py` 的 `__version__`；
 发版流程 = 改版本号 + 更新本文件 + `git tag vX.Y.Z` + push main 与 tags。
 
+## v1.1.2 — 2026-09-23
+
+### 修复
+- TraeWork/MiniMax/WorkBuddy 的"今日已签到(already)"分支未填 reward 字段，
+  面板/卡片"今日已得"显示为空。现在从状态接口取今日所得回填
+  （Trae=credits、MiniMax=今日 points、WorkBuddy=today_credit）。
+
 ## v1.1.1 — 2026-09-23
 
 ### 修复

@@ -45,7 +45,8 @@ class TraeAdapter(Adapter):
             return CheckinResult('error', 'TraeWork 签到活动未开启')
         credits = st.get('credits')
         if st.get('checked_in'):
-            return CheckinResult('already', f'今日已签到（+{credits} 积分）')
+            return CheckinResult('already', f'今日已签到（+{credits} 积分）',
+                                 f'+{credits} 积分' if credits else '')
         cl = self._post(creds, CLAIM_PATH)
         body = cl if isinstance(cl, dict) else {}
         if body.get('code') == 0:

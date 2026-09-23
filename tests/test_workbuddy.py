@@ -29,9 +29,11 @@ def test_checkin_ok_flow(wb, local_server):
 def test_checkin_already_by_status(wb, local_server):
     local_server.route('POST', STATUS,
                        body={'data': {'today_checked_in': True,
+                                      'today_credit': 100,
                                       'total_credits': 2500}})
     r = wb.checkin(_creds(local_server))
     assert r.state == 'already' and '2500' in r.message
+    assert r.reward == '+100 积分'
 
 
 def test_checkin_already_by_claim_10001(wb, local_server):

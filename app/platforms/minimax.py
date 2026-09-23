@@ -121,7 +121,8 @@ class MinimaxAdapter(Adapter):
                           if isinstance(d, dict) and d.get('is_today')), None)
             points = int((today or {}).get('points') or 0)
             if today and int(today.get('status') or 0) == 3:
-                return CheckinResult('already', f'今日已签到（+{points} 积分）')
+                return CheckinResult('already', f'今日已签到（+{points} 积分）',
+                                     f'+{points} 积分' if points else '')
             try:
                 claimed = _unwrap(self._call(creds, CLAIM_PATH, {}))
             except _BusinessError as exc:

@@ -66,8 +66,11 @@ class WorkbuddyAdapter(Adapter):
         st = self._post(creds, STATUS_PATH)
         if _dig(st, 'today_checked_in') in (True, 1):
             total = _dig(st, 'total_credits')
+            today_credit = _dig(st, 'today_credit') or _dig(st, 'daily_credit')
             tail = f'（余 {total}）' if total else ''
-            return CheckinResult('already', f'今日已签到{tail}')
+            return CheckinResult(
+                'already', f'今日已签到{tail}',
+                f'+{today_credit} 积分' if today_credit else '')
         try:
             cl = self._post(creds, CLAIM_PATH)
         except Exception as exc:      # noqa: BLE001 —— 400 code10001 走"已签"判定

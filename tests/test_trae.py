@@ -30,6 +30,7 @@ def test_checkin_already(trae, local_server):
                                  'credits': 150})
     r = trae.checkin({'token': 'T', 'host': local_server.base})
     assert r.state == 'already' and '150' in r.message
+    assert r.reward == '+150 积分'      # 面板"今日已得"读 reward
 
 
 def test_checkin_claim_9004_counts_already(trae, local_server):
