@@ -62,6 +62,29 @@ def test_scan_maps_dumate_key_to_dazi(tmp_path):
     assert json.loads((inbox / 'dazi.json').read_text(encoding='utf-8'))['cookie'] == 'bce-user-info=x'
 
 
+def test_scan_trae_and_workbuddy(tmp_path):
+    home = tmp_path / 'home'
+    wbs = home / '.wb-switch'
+    wbs.mkdir(parents=True)
+    (wbs / 'agent_accounts.json').write_text(json.dumps(
+        [{'platform': 'trae', 'token': 'CJT', 'device_id': 'D1',
+          'needs_relogin': False}]), encoding='utf-8')
+    local = tmp_path / 'local'
+    auth_dir = local / 'CodeBuddyExtension' / 'Data' / 'Public' / 'auth'
+    auth_dir.mkdir(parents=True)
+    (auth_dir / 'workbuddy-desktop.info').write_text(json.dumps(
+        {'auth': {'accessToken': 'AT', 'domain': 'tencent.com'},
+         'account': {'uid': 'U9', 'enterpriseId': 'E1'}}), encoding='utf-8')
+    inbox = tmp_path / 'inbox'
+    found = scan_local_accounts(inbox, home=home, appdata=tmp_path / 'noapp',
+                                localappdata=local)
+    assert found == ['trae', 'workbuddy']
+    assert json.loads((inbox / 'trae.json').read_text(encoding='utf-8')) == \
+        {'token': 'CJT', 'device_id': 'D1'}
+    assert json.loads((inbox / 'workbuddy.json').read_text(encoding='utf-8')) == \
+        {'token': 'AT', 'uid': 'U9', 'domain': 'tencent.com', 'enterprise_id': 'E1'}
+
+
 def test_scan_linkai_from_agent_accounts(tmp_path):
     home = tmp_path / 'home'
     wbs = home / '.wb-switch'

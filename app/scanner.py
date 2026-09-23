@@ -14,11 +14,12 @@ from pathlib import Path
 _COOKIE_PLATFORMS = {'wps', 'dazi'}
 # wb-switch 存储键 → 本项目平台键（agent_ext.rs 里搭子的 key 是 dumate）
 _KEY_ALIASES = {'dumate': 'dazi'}
-_SUPPORTED = {'wps', 'dazi', 'minimax', 'qoder', 'linkai'}
+_SUPPORTED = {'wps', 'dazi', 'minimax', 'qoder', 'linkai', 'trae'}
 
 
 def scan_local_accounts(inbox: Path, home: Path | None = None,
-                        appdata: Path | None = None) -> list[str]:
+                        appdata: Path | None = None,
+                        localappdata: Path | None = None) -> list[str]:
     home = home or Path.home()
     inbox = Path(inbox)
     found: list[str] = []
@@ -35,6 +36,8 @@ def scan_local_accounts(inbox: Path, home: Path | None = None,
             if platform not in _SUPPORTED or not token or acc.get('needs_relogin'):
                 continue
             creds = {'cookie': token} if platform in _COOKIE_PLATFORMS else {'token': token}
+            if platform == 'trae' and acc.get('device_id'):
+                creds['device_id'] = str(acc['device_id'])
             found.append(_write(inbox, platform, creds))
     ms_file = home / '.wb-switch' / 'modelscope_login.json'
     if ms_file.exists():
@@ -54,7 +57,44 @@ def scan_local_accounts(inbox: Path, home: Path | None = None,
         _write(inbox, 'linkai', {'token': linkai_jwt})
         if 'linkai' not in found:
             found.append('linkai')
+    wb = _read_workbuddy_auth(localappdata, appdata, home)
+    if wb:
+        _write(inbox, 'workbuddy', wb)
+        found.append('workbuddy')
     return sorted(found)
+
+
+def _read_workbuddy_auth(localappdata: Path | None, appdata: Path | None,
+                         home: Path) -> dict:
+    if localappdata:
+        local = Path(localappdata)
+    elif appdata:
+        local = Path(appdata).parent / 'Local'
+    else:
+        local = Path(os.environ.get('LOCALAPPDATA')
+                     or home / 'AppData' / 'Local')
+    candidates = [
+        local / 'CodeBuddyExtension' / 'Data' / 'Public' / 'auth'
+        / 'workbuddy-desktop.info',
+        home / '.workbuddy' / 'auth' / 'workbuddy-desktop.info',
+    ]
+    for path in candidates:
+        try:
+            data = json.loads(path.read_text(encoding='utf-8'))
+        except Exception:
+            continue
+        auth = data.get('auth') or {}
+        account = data.get('account') or {}
+        token, uid = str(auth.get('accessToken') or ''), str(account.get('uid') or '')
+        if not token or not uid:
+            continue
+        creds = {'token': token, 'uid': uid}
+        if auth.get('domain'):
+            creds['domain'] = str(auth['domain'])
+        if account.get('enterpriseId'):
+            creds['enterprise_id'] = str(account['enterpriseId'])
+        return creds
+    return {}
 
 
 def _extract_linkai_jwt(appdata: Path | None, home: Path) -> str:

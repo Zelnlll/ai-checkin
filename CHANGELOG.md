@@ -3,6 +3,18 @@
 遵循语义化版本（SemVer）。版本号单一来源：`app/__init__.py` 的 `__version__`；
 发版流程 = 改版本号 + 更新本文件 + `git tag vX.Y.Z` + push main 与 tags。
 
+## v1.1.0 — 2026-09-23
+
+### 新增
+- **WorkBuddy 平台**（腾讯 copilot.tencent.com，每日签到积分）：桌面端会话
+  `workbuddy-desktop.info` 扫描导入；协议与幂等契约（null/10001=已签）逆向自
+  GitHub `Minatoxiaohu/agent-auto-signin`，本机实测。卡片圆点 🔹。
+- **TraeWork 平台**（api.trae.cn，每日 200 积分）：桌面端 storage.json 登录态
+  经 wb-switch 捕获扫描导入，Cloud-IDE-JWT 直调 status/claim；claim 9004 按
+  "已领"幂等处理。卡片圆点 🔸。
+- 扫描器：`agent_accounts.json` 支持 trae（含 device_id），新增
+  `%LOCALAPPDATA%\CodeBuddyExtension\...\workbuddy-desktop.info` 来源。
+
 ## v1.0.1 — 2026-09-23
 
 面板数据正确性修复（用户截图审查发现）。
