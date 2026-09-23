@@ -193,12 +193,17 @@ body { margin:0; padding:20px; background:#f3f6f9;
 .mtitle { font-size:16px; font-weight:700; flex:1; }
 .mbal { font-size:12px; color:#6b7280; }
 .mclose { color:#9ca3af; font-size:16px; cursor:pointer; padding:0 4px; }
-.mtag { font-size:11px; border-radius:7px; padding:2px 7px; white-space:nowrap; }
-.mrow { display:flex; align-items:center; gap:8px; padding:9px 2px;
+.mtag { font-size:11px; border-radius:7px; padding:2px 7px; text-align:center; }
+.mrow { display:grid; grid-template-columns:52px 1fr 72px 132px; gap:8px;
+        align-items:center; padding:9px 2px;
         border-bottom:1px solid #f1f2f4; font-size:13px; color:#374151; }
-.mrow .amt { margin-left:auto; font-weight:600; color:#111827; white-space:nowrap; }
-.mrow .exp { color:#6b7280; font-size:12px; text-align:right; min-width:118px; }
+.mrow .amt { text-align:right; font-weight:600; color:#111827; }
+.mrow .exp { color:#6b7280; font-size:12px; text-align:right; }
 .mnote { font-size:13px; color:#6b7280; padding:14px 2px; text-align:center; }
+.msum { display:flex; gap:10px; margin:0 0 12px; }
+.msum span { flex:1; background:#f8fafc; border:1px solid #eef0f3; border-radius:10px;
+             padding:8px 12px; font-size:15px; font-weight:600; color:#111827; }
+.msum b { font-size:12px; font-weight:500; color:#6b7280; margin-right:6px; }
 """
 
 _JS = """
@@ -239,6 +244,8 @@ async function webLogin(p){
   const j = await r.json();
   alert(j.ok ? '登录成功，Cookie 已导入' : ('未完成：'+j.message));
 }
+function fmtNum(v){ return Number.isInteger(v) ? v.toLocaleString('zh-CN')
+  : v.toFixed(2).replace(/\.00$/, ''); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 async function showDetail(p){
@@ -250,6 +257,13 @@ async function showDetail(p){
     + '</span><span class="mbal">余额 ' + (j.balance ? esc(j.balance) : '—')
     + '</span><span class="mclose" onclick="closeDetail()">✕</span></div>';
   if (j.rows && j.rows.length) {
+    const sums = {};
+    j.rows.forEach(row => { const v = parseFloat(row.amount);
+      if (!isNaN(v)) sums[row.tag] = (sums[row.tag] || 0) + v; });
+    const keys = Object.keys(sums);
+    if (keys.length > 1) h += '<div class="msum">' + keys.map(k =>
+      '<span><b>' + esc(k) + '</b> ' + fmtNum(sums[k]) + '</span>').join('')
+      + '</div>';
     h += j.rows.map(row => '<div class="mrow"><span class="mtag" style="background:'
       + ac + '1a;color:' + ac + '">' + esc(row.tag) + '</span><span>' + esc(row.name)
       + '</span><span class="amt">' + esc(row.amount) + '</span><span class="exp">'

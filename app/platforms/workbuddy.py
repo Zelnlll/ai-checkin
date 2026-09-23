@@ -134,8 +134,8 @@ class WorkbuddyAdapter(Adapter):
             if remain in (None, '', 0, '0'):
                 continue
             count = int(pack.get('TotalCount') or 1)
-            rows.append({'tag': f'{count}包合并' if count > 1 else '单包',
-                         'name': f'积分包 {i}',
+            rows.append({'tag': '资源包',
+                         'name': f'包 {i}' + (f'（{count}小包合并）' if count > 1 else ''),
                          'amount': str(remain), 'expire': '—'})
         return rows
 

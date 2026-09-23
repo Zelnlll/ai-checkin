@@ -90,9 +90,11 @@ class TraeAdapter(Adapter):
             exp = float(p.get('expire_time') or info.get('end_time') or 0)
             if not quota or not exp or exp < now:
                 continue
+            # product_id 决定积分池：209=Work，其余（208/221…）=通用
+            pool = 'Work' if int(info.get('product_id') or 0) == 209 else '通用'
             stamped.append((exp, {
-                'tag': str(p.get('group_name') or ''),
-                'name': str(p.get('display_desc') or ''),
+                'tag': pool,
+                'name': str(p.get('group_name') or p.get('display_desc') or ''),
                 'amount': str(quota), 'expire': expire_text(exp)}))
         stamped.sort(key=lambda t: t[0])
         return [row for _, row in stamped]

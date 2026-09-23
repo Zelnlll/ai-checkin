@@ -113,7 +113,8 @@ def test_breakdown_lists_packages(wb, local_server):
     creds['web_endpoint'] = local_server.base
     rows = wb.breakdown(creds)
     assert rows[0]['amount'] == '4269'
-    assert rows[0]['tag'] == '27包合并'
-    assert rows[0]['name'] == '积分包 1'
+    assert rows[0]['tag'] == '资源包'
+    assert rows[0]['name'] == '包 1（27小包合并）'
+    assert rows[1]['name'] == '包 2'
     assert rows[1]['amount'] == '485.24'
     assert rows[0]['expire'] == '—'
