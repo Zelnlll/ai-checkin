@@ -3,6 +3,14 @@
 遵循语义化版本（SemVer）。版本号单一来源：`app/__init__.py` 的 `__version__`；
 发版流程 = 改版本号 + 更新本文件 + `git tag vX.Y.Z` + push main 与 tags。
 
+## v1.2.2 — 2026-09-23
+
+### 修复
+- WorkBuddy 积分明细补上失效时间：改查官方
+  `get-user-resource-paid/free-packages` 两接口的逐包 `data.Accounts`
+  （含 PackageName/DeductionEndTime，码表与长期占位解析移植自 wb-switch
+  credits.rs），summary 接口继续只用于余额合计。
+
 ## v1.2.1 — 2026-09-23
 
 ### 优化

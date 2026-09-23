@@ -101,20 +101,42 @@ def test_credits_integer_when_no_decimal(wb, local_server):
 
 
 def test_breakdown_lists_packages(wb, local_server):
-    # 官方 summary 无逐包失效时间（2026-09-23 实测字段），expire 显示占位
-    local_server.route('POST', '/billing/meter/get-user-resource-summary',
-                       body={'code': 0, 'data': {'Packages': [
-                           {'PackageCode': 'TCACA_code_007_abc',
-                            'CycleRemainCapacity': '4269', 'TotalCount': 27},
-                           {'PackageCode': 'TCACA_code_008_def',
-                            'CycleRemainCapacity': '485.24', 'TotalCount': 1},
-                       ]}})
+    # 逐包明细在 paid/free-packages 两接口的 data.Accounts（含到期时间），
+    # summary 只有聚合数（2026-09-23 实测，码表源自 wb-switch credits.rs）
+    import time
+    ded_far = int((time.time() + 20 * 86400) * 1000)
+    ded_near = int((time.time() + 7 * 86400) * 1000)
+    accounts = [
+        {'PackageName': '裂变赠送包', 'PackageCode': 'A',
+         'CycleCapacityRemainPrecise': '1500', 'DeductionEndTime': ded_far},
+        {'PackageName': '签到包', 'PackageCode': 'B',
+         'CycleCapacityRemain': 100, 'DeductionEndTime': ded_near},
+        {'PackageName': '空包', 'PackageCode': 'C',
+         'CycleCapacityRemain': 0, 'DeductionEndTime': ded_near},
+    ]
+    local_server.route('POST', '/billing/meter/get-user-resource-paid-packages',
+                       body={'code': 0, 'data': {'Accounts': []}})
+    local_server.route('POST', '/billing/meter/get-user-resource-free-packages',
+                       body={'code': 0, 'data': {'Accounts': accounts}})
     creds = _creds(local_server)
     creds['web_endpoint'] = local_server.base
     rows = wb.breakdown(creds)
-    assert rows[0]['amount'] == '4269'
+    assert [r['amount'] for r in rows] == ['100', '1500']   # 空包剔除+失效升序
+    assert rows[0]['name'] == '签到包'
     assert rows[0]['tag'] == '资源包'
-    assert rows[0]['name'] == '包 1（27小包合并）'
-    assert rows[1]['name'] == '包 2'
-    assert rows[1]['amount'] == '485.24'
-    assert rows[0]['expire'] == '—'
+    assert '7天后过期' in rows[0]['expire']
+
+
+def test_breakdown_far_future_is_permanent(wb, local_server):
+    import time
+    ded_2049 = int((time.time() + 4000 * 86400) * 1000)   # 长期占位值
+    local_server.route('POST', '/billing/meter/get-user-resource-paid-packages',
+                       body={'code': 0, 'data': {'Accounts': [
+                           {'PackageName': '长期包', 'CycleCapacityRemain': 5,
+                            'DeductionEndTime': ded_2049}]}})
+    local_server.route('POST', '/billing/meter/get-user-resource-free-packages',
+                       body={'code': 0, 'data': {'Accounts': []}})
+    creds = _creds(local_server)
+    creds['web_endpoint'] = local_server.base
+    rows = wb.breakdown(creds)
+    assert rows[0]['expire'] == '长期有效'

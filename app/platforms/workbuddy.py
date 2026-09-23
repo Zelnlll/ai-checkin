@@ -18,6 +18,24 @@ WB_WEB_ENDPOINT = 'https://www.workbuddy.cn'
 STATUS_PATH = '/v2/billing/meter/checkin-activity-status'
 CLAIM_PATH = '/v2/billing/meter/daily-checkin'
 SUMMARY_PATH = '/billing/meter/get-user-resource-summary'
+PAID_PACKAGES_PATH = '/billing/meter/get-user-resource-paid-packages'
+FREE_PACKAGES_PATH = '/billing/meter/get-user-resource-free-packages'
+
+# 公开套餐码表（源 wb-switch credits.rs；多带不存在的码无副作用）
+PAID_PACKAGE_CODES = [
+    'TCACA_code_002_AkiJS3ZHF5', 'TCACA_code_023_4xbGhMrE6q',
+    'TCACA_code_026_BaESVICNoi', 'TCACA_code_027_0FCGVA6vSa',
+    'TCACA_code_009_0XmEQc2xOf', 'TCACA_code_038_OhvqZtiPKr',
+    'TCACA_code_003_FAnt7lcmRT', 'TCACA_code_036_lupO5WgNdG',
+]
+FREE_PACKAGE_CODES = [
+    'TCACA_code_008_cfWoLwvjU4', 'TCACA_code_007_nzdH5h4Nl0',
+    'TCACA_code_028_NtpWi0jzXs', 'TCACA_code_029_6wCGEWquYy',
+    'TCACA_code_030_BjSt89qTvr', 'TCACA_code_001_PqouKr6QWV',
+    'TCACA_code_006_DbXS0lrypC', 'TCACA_code_035_ArVxJcGDsm',
+    'TCACA_code_037_WxOD3MpI2o', 'TCACA_code_039_KRcQj7wUat',
+    'TCACA_code_040_mi9rCYg46x',
+]
 
 
 def _dig(obj: Any, key: str) -> Any:
@@ -123,21 +141,77 @@ class WorkbuddyAdapter(Adapter):
         return str(int(total)) if total == int(total) else str(round(total, 2))
 
     def breakdown(self, creds: dict[str, Any]) -> list[dict[str, str]]:
-        # 官方 summary 只给逐包余量，无失效时间字段（2026-09-23 实测）
-        rows = []
-        for i, pack in enumerate(_dig(self._web_summary(creds), 'Packages') or [], 1):
-            if not isinstance(pack, dict):
+        # 逐包明细在 paid/free-packages 接口的 data.Accounts（含 DeductionEndTime），
+        # 码表与到期解析移植自 wb-switch credits.rs（2026-09-23 实测）
+        import time as _t
+        from datetime import datetime
+        from app.platforms.base import expire_text, fmt_amount
+        web = str(creds.get('web_endpoint') or WB_WEB_ENDPOINT).rstrip('/')
+        headers = self._headers(creds)
+        headers.update({'Origin': web, 'Referer': web + '/'})
+        now = _t.time()
+        today = datetime.now()
+
+        def _ts(value: Any) -> float | None:
+            if value in (None, ''):
+                return None
+            try:
+                num = float(value)
+                return num / 1000 if num > 1e11 else num
+            except (TypeError, ValueError):
+                pass
+            for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d'):
+                try:
+                    return datetime.strptime(str(value)[:19], fmt).timestamp()
+                except ValueError:
+                    continue
+            return None
+
+        def _expire(a: dict) -> float | None:
+            ded = _ts(a.get('DeductionEndTime') or a.get('ExpiredTime'))
+            cyc = _ts(a.get('CycleEndTime'))
+            val = ded if ded is not None else cyc
+            if val is None:
+                return None
+            if ded is not None and cyc is not None and ded - cyc > 365 * 86400:
+                val = cyc          # 2049 类长期占位 → 用周期结束时间
+            return None if val > now + 730 * 86400 else val
+
+        accounts: list[dict] = []
+        for path, body in (
+            (PAID_PACKAGES_PATH,
+             {'PageNumber': 1, 'PageSize': 200, 'Status': [0, 3],
+              'PackageCodes': PAID_PACKAGE_CODES, 'NeedRenewInfo': True}),
+            (FREE_PACKAGES_PATH,
+             {'PageNumber': 1, 'PageSize': 200, 'Status': [0, 3],
+              'SlicePeriodStartTime': today.strftime('%Y-%m-%d 00:00:00'),
+              'SlicePeriodEndTime': today.strftime('%Y-%m-%d 23:59:59'),
+              'PackageCodes': FREE_PACKAGE_CODES}),
+        ):
+            try:
+                resp = http_json('POST', web + path, headers, body=body)
+            except Exception:               # noqa: BLE001 —— 一档失败不拖另一档
                 continue
-            remain = (pack.get('CycleCapacityRemainPrecise')
-                      or pack.get('CycleRemainCapacity')
-                      or pack.get('CycleCapacityRemain'))
-            if remain in (None, '', 0, '0'):
+            accounts += [a for a in (_dig(resp, 'Accounts') or [])
+                         if isinstance(a, dict)]
+        stamped: list[tuple[float, dict[str, str]]] = []
+        for a in accounts:
+            raw = (a.get('CycleCapacityRemainPrecise')
+                   or a.get('CycleCapacityRemain') or a.get('CapacityRemain'))
+            try:
+                remain = float(raw or 0)
+            except (TypeError, ValueError):
                 continue
-            count = int(pack.get('TotalCount') or 1)
-            rows.append({'tag': '资源包',
-                         'name': f'包 {i}' + (f'（{count}小包合并）' if count > 1 else ''),
-                         'amount': str(remain), 'expire': '—'})
-        return rows
+            if remain <= 0:
+                continue
+            exp = _expire(a)
+            stamped.append((exp if exp is not None else float('inf'), {
+                'tag': '资源包',
+                'name': str(a.get('PackageName') or a.get('PackageCode') or '积分包'),
+                'amount': fmt_amount(remain),
+                'expire': expire_text(exp) if exp is not None else '长期有效'}))
+        stamped.sort(key=lambda t: t[0])
+        return [row for _, row in stamped]
 
 
 register(WorkbuddyAdapter())
