@@ -562,8 +562,8 @@ class _Handler(BaseHTTPRequestHandler):
 <title>访问验证 · 签到中心</title><style>""" + _STYLE + """</style></head>
 <body><div class="wrap"><div class="head" style="max-width:360px;margin:15vh auto 0;
 text-align:center"><div class="title">🔒 访问验证</div>
-<div class="slogan" style="margin:10px 0">请输入面板访问令牌</div>
-<input id="tk" type="password" placeholder="PANEL_TOKEN" style="width:100%;
+<div class="slogan" style="margin:10px 0">请输入访问密码</div>
+<input id="tk" type="password" placeholder="访问密码" style="width:100%;
 box-sizing:border-box;border:1px solid #d1d5db;border-radius:8px;padding:10px;
 font-size:14px">
 <button class="btn blue" style="margin-top:10px" onclick="go()">进入</button>
@@ -574,7 +574,7 @@ async function go(){
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({token:v})});
   if (r.ok) location.href = '/?k=' + encodeURIComponent(v);
-  else alert('令牌不正确');
+  else alert('密码不正确');
 }
 document.getElementById('tk').addEventListener('keydown', e =>
   e.key === 'Enter' && go());
@@ -633,7 +633,7 @@ document.getElementById('tk').addEventListener('keydown', e =>
     def _get(self):
         if not self._authorized():
             if self.path.startswith('/api/'):
-                self._json({'ok': False, 'message': '需要访问令牌'}, 401)
+                self._json({'ok': False, 'message': '需要访问密码'}, 401)
             else:
                 self._login_page()
             return
@@ -666,7 +666,7 @@ document.getElementById('tk').addEventListener('keydown', e =>
             self._auth_login()
             return
         if not self._authorized():
-            self._json({'ok': False, 'message': '需要访问令牌'}, 401)
+            self._json({'ok': False, 'message': '需要访问密码'}, 401)
             return
         cfg, store, state, _ = self._status()
         length = min(int(self.headers.get('Content-Length') or 0), 1024 * 1024)
