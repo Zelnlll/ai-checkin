@@ -36,6 +36,15 @@ def _extract_state(context, page) -> dict[str, str] | None:
     return creds or None
 
 
+def _login_done(spec: dict[str, Any], creds: dict[str, str] | None) -> bool:
+    if not creds:
+        return False
+    marker = spec.get('cookie')
+    if marker and marker in creds.get('cookie', ''):
+        return True
+    return bool(spec.get('local_storage')) and spec['local_storage'] in creds
+
+
 def browser_login(cfg, platform: str, headful: bool = False) -> int:
     spec = PLATFORM_LOGIN.get(platform)
     if spec is None:
@@ -63,8 +72,7 @@ def browser_login(cfg, platform: str, headful: bool = False) -> int:
         found: dict[str, str] | None = None
         while time.time() < deadline:
             creds = _extract_state(context, page)
-            if creds and (spec.get('cookie') in creds.get('cookie', '')
-                          or spec.get('local_storage') in creds):
+            if _login_done(spec, creds):
                 found = creds
                 break
             if headful:
