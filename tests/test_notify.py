@@ -122,7 +122,7 @@ def test_textcard_line_shows_balance_and_streak(adapters_registered):
                                             balance='2592', streak=3)),
     ], '2026-09-22')
     d = msg['textcard']['description']
-    assert '🔸 WPS 灵犀 +100' in d and '　余2592｜连3天' in d  # 无到期只出两项
+    assert '🔸 WPS 灵犀 +100' in d and '　  余2592｜连3天' in d  # 无到期只出两项
 
 
 def test_textcard_omits_absent_extras(adapters_registered):
@@ -151,7 +151,7 @@ def test_textcard_lines_fit_one_row(adapters_registered):
         CheckinOutcome('qoder', CheckinResult('ok', '成功', '+100 Credits')),
     ], '2026-09-22')
     d = msg['textcard']['description']
-    assert '🔸 MiniMax +400' in d and '　余2262｜连4天' in d   # 短名+去积分，两行
+    assert '🔸 MiniMax +400' in d and '　  余2262｜连4天' in d   # 短名+去积分，两行
     assert '🔸 Qoder +100' in d and 'Cr' not in d   # 单位全删
     for line in d.split(chr(10)):
         assert len(line) <= 26                     # 手机单行预算
@@ -184,9 +184,9 @@ def test_textcard_two_line_compact_layout():
     d = build_textcard(outcomes, '2026-09-23')['textcard']['description']
     lines = d.split(chr(10))
     assert lines[1].startswith('🔸') and '积分' not in lines[1]
-    assert lines[2].startswith('　')            # 第二行全角缩进对齐
+    assert lines[2].startswith('　  ')          # 第二行 h 版缩进（全角+两半角）对齐平台名
     # 定稿列序：余额｜连签｜到期积分
-    assert lines[2] == '　余2592｜连3天｜100·09-30到期'
+    assert lines[2] == '　  余2592｜连3天｜100·09-30到期'
 
 
 def test_textcard_single_line_when_no_extras():

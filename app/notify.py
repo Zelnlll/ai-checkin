@@ -73,7 +73,8 @@ def build_textcard(outcomes: list[CheckinOutcome], today: str) -> dict[str, Any]
             extras.append(r.expiring.replace(' · ', '·'))
         lines.append(f'{_dot(o)} {name} {detail}'[:40])
         if extras:
-            lines.append('　' + '｜'.join(extras))
+            # h 版缩进：全角+两半角，行2 首字对齐行1 平台名首字
+            lines.append('　  ' + '｜'.join(extras))
     while len(chr(10).join(lines).encode('utf-8')) > 500 and len(lines) > 2:
         if lines[-1].startswith('　'):
             lines.pop()
