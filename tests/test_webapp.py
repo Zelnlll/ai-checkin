@@ -59,3 +59,13 @@ def test_render_html_has_detail_modal(tmp_path):
     html = render_html(collect_status(cfg, store, state, PLATFORMS))
     assert 'id="mask"' in html and 'showDetail(' in html
     assert 'closeDetail' in html
+
+
+def test_card_shows_earliest_expiring(tmp_path):
+    cfg, store, state = _setup(tmp_path)
+    state.set_expiring('wps', state_today(), '1500 · 10-15到期')
+    status = collect_status(cfg, store, state, PLATFORMS)
+    wps = next(p for p in status['platforms'] if p['platform'] == 'wps')
+    assert wps['expiring'] == '1500 · 10-15到期'
+    html = render_html(status)
+    assert '最快到期' in html and '1500 · 10-15到期' in html

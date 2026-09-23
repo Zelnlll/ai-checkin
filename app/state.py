@@ -97,6 +97,14 @@ class DailyState:
             rec['balance'] = str(balance)
             self._save(data)
 
+    def set_expiring(self, platform: str, day: str, value: str) -> None:
+        """只合并 expiring 字段（最快到期积分缓存），不触碰 state/at。"""
+        with self._locked():
+            data = self._load()
+            rec = data.setdefault(day, {}).setdefault(platform, {})
+            rec['expiring'] = str(value)
+            self._save(data)
+
     def streak(self, platform: str, day: str) -> int:
         """连续签到天数：day 当天未签则从昨天往前数。"""
         data = self._load()

@@ -97,6 +97,22 @@ def run_all(platforms: list[str], *, store: Any, state: Any, config: Any,
     return outcomes
 
 
+def _earliest_expiring(adapter: Any, creds: dict) -> str | None:
+    """明细里最快过期的积分包：'100 · 10-01到期'；无明细/无过期项=None。"""
+    try:
+        rows = adapter.breakdown(creds) or []
+    except Exception:                        # noqa: BLE001 —— 明细失败不影响余额轮
+        return None
+    for row in rows:                         # breakdown 已按失效时间升序
+        exp = str(row.get('expire', ''))
+        if '过期' not in exp:
+            continue
+        date = exp.split('（')[-1].rstrip('）') if '（' in exp else ''
+        amount = row.get('amount', '')
+        return f'{amount} · {date}到期' if date else f'{amount} 即将过期'
+    return None
+
+
 def run_balance(store: Any, state: Any, platforms: list[str],
                 today: str) -> dict[str, str]:
     """余额循环刷新：只发各平台 credits() 轻量 GET（兼作保活），不碰签到端点。"""
@@ -112,6 +128,9 @@ def run_balance(store: Any, state: Any, platforms: list[str],
         value = _refresh_balance(state, adapter, creds, platform, today)
         if value:
             out[platform] = value
+        expiring = _earliest_expiring(adapter, creds)
+        if expiring:
+            state.set_expiring(platform, today, expiring)
     return out
 
 

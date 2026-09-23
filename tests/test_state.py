@@ -97,3 +97,14 @@ def test_set_balance_creates_balance_only_record(tmp_path):
     rec = st.get('qoder', TODAY)
     assert rec == {'balance': '9'}
     assert not st.done_today('qoder')       # 绝不因余额写入变成"已完成"
+
+
+def test_set_expiring_merges_only_field(tmp_path):
+    st = DailyState(tmp_path)
+    st.mark('wps', CheckinResult('ok', 'm', '+1', balance='10'), TODAY)
+    before = st.get('wps', TODAY)
+    st.set_expiring('wps', TODAY, '1500 · 10-15到期')
+    after = st.get('wps', TODAY)
+    assert after['expiring'] == '1500 · 10-15到期'
+    assert after['state'] == 'ok' and after['balance'] == '10'
+    assert after['at'] == before['at']

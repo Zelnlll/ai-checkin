@@ -250,3 +250,29 @@ def test_balance_due_boundaries():
     assert not balance_due(1000, None, 60)          # 未初始化不触发
     assert balance_due(4600, 1000, 60)
     assert not balance_due(3000, 1000, 60)
+
+
+def test_run_balance_caches_earliest_expiring(stub_registered):
+    ADAPTERS['stub'] = StubBal()
+    StubBal.breakdown = lambda self, creds: [
+        {'tag': '资源包', 'name': '签到包', 'amount': '100',
+         'expire': '7天后过期（10-01）'},
+        {'tag': '资源包', 'name': '长期包', 'amount': '50', 'expire': '长期有效'},
+    ]
+    try:
+        state = FakeState()
+        run_balance(FakeStore({'stub': {'token': 't'}}), state, ['stub'], 'd')
+        assert state.expirings == [('stub', '100 · 10-01到期')]
+    finally:
+        del StubBal.breakdown
+        del ADAPTERS['stub']
+
+
+def test_run_balance_no_breakdown_no_expiring(stub_registered):
+    ADAPTERS['stub'] = StubBal()
+    try:
+        state = FakeState()
+        run_balance(FakeStore({'stub': {'token': 't'}}), state, ['stub'], 'd')
+        assert state.expirings == []
+    finally:
+        del ADAPTERS['stub']

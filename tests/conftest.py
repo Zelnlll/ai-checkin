@@ -108,6 +108,7 @@ class FakeState:
         self.marked: list = []
         self.results: list = []
         self.balances: list = []
+        self.expirings: list = []
 
     def done_today(self, platform):
         return platform in self._done
@@ -118,6 +119,9 @@ class FakeState:
 
     def set_balance(self, platform, day, balance):
         self.balances.append((platform, balance))
+
+    def set_expiring(self, platform, day, value):
+        self.expirings.append((platform, value))
 
     def get(self, platform, day):
         return self._recs.get((platform, day))
