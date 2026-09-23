@@ -18,9 +18,33 @@ PLATFORM_LOGIN: dict[str, dict[str, Any]] = {
     'dazi': {'url': 'https://console.bce.baidu.com/', 'cookie': 'bce-user-info'},
     'modelscope': {'url': 'https://www.modelscope.cn/', 'cookie': 'm_session_id'},
     'minimax': {'url': 'https://agent.minimaxi.com/', 'local_storage': 'token',
-                'web_session': True},
-    'linkai': {'url': 'https://link-ai.tech/console/account', 'local_storage': 'token'},
+                'web_session': True,
+                'capture': {'url': 'minimax-cloud', 'header': 'token'}},
+    'linkai': {'url': 'https://link-ai.tech/console/account',
+               'local_storage': 'token',
+               'capture': {'url': 'link-ai.tech/api', 'header': 'authorization',
+                           'strip': 'Bearer '}},
 }
+
+
+def _capture_request(spec: dict[str, Any], captured: dict[str, str],
+                     request) -> None:
+    """按 spec['capture'] 从真实外发请求抓 API 认的票据（首见优先）。"""
+    cap = spec.get('capture')
+    if not cap or cap['url'] not in request.url:
+        return
+    if not captured.get('token'):
+        v = request.headers.get(cap['header'], '')
+        strip = cap.get('strip', '')
+        if strip and v.startswith(strip):
+            v = v[len(strip):]
+        if v:
+            captured['token'] = v
+    if 'user_id' not in captured:
+        from urllib.parse import parse_qs, urlparse
+        uid = parse_qs(urlparse(request.url).query).get('user_id')
+        if uid and uid[0] not in ('', 'undefined'):
+            captured['user_id'] = uid[0]
 
 
 def _extract_state(context, header_token: str = '') -> dict[str, str] | None:
@@ -65,28 +89,21 @@ def browser_login(cfg, platform: str, headful: bool = False) -> int:
         ctx_kwargs = {'storage_state': str(state_file)} if state_file.exists() else {}
         context = browser.new_context(**ctx_kwargs)
         page = context.new_page()
-        # 只认发往 /minimax-cloud/ 的 token 头（页面自家核心 API 的 JWT 网关不认）
-        sent_tokens: list[str] = []
-        sample_headers: dict[str, str] = {}
+        # 从网站真实外发请求抓 API 认的票据（与 F12 手动复制同源）
         captured: dict[str, str] = {}
+        sample_headers: dict[str, str] = {}
 
         def _on_request(request):
-            if 'minimax-cloud' in request.url:
-                tok = request.headers.get('token')
-                if tok and tok not in sent_tokens:
-                    sent_tokens.append(tok)
-                    sample_headers.update(request.headers)
-                from urllib.parse import parse_qs, urlparse
-                uid = parse_qs(urlparse(request.url).query).get('user_id')
-                if uid and uid[0] not in ('', 'undefined'):
-                    captured.setdefault('user_id', uid[0])
+            before = captured.get('token')
+            _capture_request(spec, captured, request)
+            if captured.get('token') and captured['token'] != before:
+                sample_headers.update(request.headers)
         context.on('request', _on_request)
         page.goto(spec['url'], wait_until='domcontentloaded')
         deadline = time.time() + timeout_s
         found: dict[str, str] | None = None
         while time.time() < deadline:
-            creds = _extract_state(context,
-                                   sent_tokens[0] if sent_tokens else '')
+            creds = _extract_state(context, captured.get('token', ''))
             if _login_done(spec, creds):
                 found = creds
                 break

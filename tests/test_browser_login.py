@@ -1,4 +1,46 @@
-from app.browser_login import _extract_state, _login_done
+from app.browser_login import _capture_request, _extract_state, _login_done
+
+
+class FakeReq:
+    def __init__(self, url, headers):
+        self.url = url
+        self.headers = headers
+
+
+MM_SPEC = {'url': 'x', 'local_storage': 'token', 'web_session': True,
+           'capture': {'url': 'minimax-cloud', 'header': 'token'}}
+LA_SPEC = {'url': 'x', 'local_storage': 'token',
+           'capture': {'url': 'link-ai.tech/api', 'header': 'authorization',
+                       'strip': 'Bearer '}}
+
+
+def test_capture_minimax_token_and_user_id():
+    captured = {}
+    req = FakeReq('https://agent.minimaxi.com/minimax-cloud/api/v1/x?user_id=U9',
+                  {'token': 'JWT-MM'})
+    _capture_request(MM_SPEC, captured, req)
+    assert captured['token'] == 'JWT-MM' and captured['user_id'] == 'U9'
+
+
+def test_capture_linkai_bearer_authorization():
+    captured = {}
+    req = FakeReq('https://link-ai.tech/api/chat/web/app/user/get/balance',
+                  {'authorization': 'Bearer JWT-LA'})
+    _capture_request(LA_SPEC, captured, req)
+    assert captured['token'] == 'JWT-LA'
+
+
+def test_capture_ignores_other_urls_and_first_wins():
+    captured = {}
+    _capture_request(LA_SPEC, captured,
+                     FakeReq('https://link-ai.tech/console/account',
+                             {'authorization': 'Bearer X'}))
+    assert captured == {}
+    _capture_request(LA_SPEC, captured,
+                     FakeReq('https://link-ai.tech/api/a', {'authorization': 'Bearer T1'}))
+    _capture_request(LA_SPEC, captured,
+                     FakeReq('https://link-ai.tech/api/b', {'authorization': 'Bearer T2'}))
+    assert captured['token'] == 'T1'
 
 
 class FakeCtx:
