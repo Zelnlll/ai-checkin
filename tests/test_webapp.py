@@ -146,3 +146,11 @@ def test_settings_account_rows_have_update_and_meta(tmp_path):
     html = render_settings(collect_status(cfg, store, state, PLATFORMS))
     assert '更新凭证' in html
     assert 'toggleEdit(' in html and 'display:none' in html   # 表单默认收起
+
+
+def test_detail_modal_uses_tabs_and_ellipsis(tmp_path):
+    cfg, store, state = _setup(tmp_path)
+    html = render_html(collect_status(cfg, store, state, PLATFORMS))
+    assert 'class="mtab"' in html.replace("'", "'") or 'mtab' in html   # 账号标签页
+    assert 'text-overflow:ellipsis' in html                              # 长名省略
+    assert 'showGroup(' in html                                          # 切换函数

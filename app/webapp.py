@@ -296,8 +296,11 @@ body { margin:0; padding:20px; background:#f3f6f9;
 .mrow .amt { text-align:right; font-weight:600; color:#111827; }
 .mrow .exp { color:#6b7280; font-size:12px; text-align:right; }
 .mnote { font-size:13px; color:#6b7280; padding:14px 2px; text-align:center; }
-.mgrouplabel { font-size:13px; font-weight:700; color:#374151; margin:12px 0 4px;
-               border-left:3px solid #2563eb; padding-left:8px; }
+.mtabs { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+.mtab { border:1px solid #e5e7eb; background:#f8fafc; color:#6b7280; border-radius:9px;
+        font-size:13px; padding:5px 14px; cursor:pointer; }
+.mtab.on { background:#2563eb; border-color:#2563eb; color:#fff; font-weight:600; }
+.mname { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
 .gear { font-size:17px; text-decoration:none; background:#eef0f3; border-radius:10px;
         width:38px; height:38px; display:flex; align-items:center; justify-content:center;
         color:#374151; flex:none; }
@@ -358,36 +361,52 @@ function fmtNum(v){ return Number.isInteger(v) ? v.toLocaleString('zh-CN')
   : v.toFixed(2).replace(/\.00$/, ''); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+let _det = null;
 async function showDetail(p){
   const r = await fetch('/api/detail/'+p);
-  const j = await r.json();
-  const ac = j.accent || '#6b7280';
+  _det = await r.json();
+  const j = _det, ac = j.accent || '#6b7280';
   let h = '<div class="mhead"><span class="icon" style="background:'+ac+'1a;color:'+ac+'">'
     + esc((j.title||'?').slice(0,1)) + '</span><span class="mtitle">' + esc(j.title)
     + '</span><span class="mbal">余额 ' + (j.balance ? esc(j.balance) : '—')
     + '</span><span class="mclose" onclick="closeDetail()">✕</span></div>';
   const groups = (j.accounts && j.accounts.length > 1) ? j.accounts
     : [{label:'', rows:j.rows||[], note:j.note||''}];
-  groups.forEach(g => {
-    if (g.label) h += '<div class="mgrouplabel">' + esc(g.label) + '</div>';
-    if (g.rows && g.rows.length) {
-      const sums = {};
-      g.rows.forEach(row => { const v = parseFloat(row.amount);
-        if (!isNaN(v)) sums[row.tag] = (sums[row.tag] || 0) + v; });
-      const keys = Object.keys(sums);
-      if (keys.length > 1) h += '<div class="msum">' + keys.map(k =>
-        '<span><b>' + esc(k) + '</b> ' + fmtNum(sums[k]) + '</span>').join('')
-        + '</div>';
-      h += g.rows.map(row => '<div class="mrow"><span class="mtag" style="background:'
-        + ac + '1a;color:' + ac + '">' + esc(row.tag) + '</span><span>' + esc(row.name)
-        + '</span><span class="amt">' + esc(row.amount) + '</span><span class="exp">'
-        + esc(row.expire) + '</span></div>').join('');
-    } else {
-      h += '<div class="mnote">' + esc(g.note || '暂无明细') + '</div>';
-    }
-  });
+  if (groups.length > 1) {
+    h += '<div class="mtabs">' + groups.map((g, i) =>
+      '<button class="mtab" onclick="showGroup(' + i + ')">'
+      + esc(g.label || ('账号' + (i + 1))) + '</button>').join('') + '</div>';
+  }
+  h += '<div id="mbody"></div>';
   document.getElementById('modal').innerHTML = h;
   document.getElementById('mask').style.display = 'flex';
+  showGroup(0);
+}
+function showGroup(i){
+  const j = _det, ac = j.accent || '#6b7280';
+  const groups = (j.accounts && j.accounts.length > 1) ? j.accounts
+    : [{label:'', rows:j.rows||[], note:j.note||''}];
+  const g = groups[i] || {rows:[], note:'暂无明细'};
+  document.querySelectorAll('.mtab').forEach((el, k) =>
+    el.classList.toggle('on', k === i));
+  let h = '';
+  if (g.rows && g.rows.length) {
+    const sums = {};
+    g.rows.forEach(row => { const v = parseFloat(row.amount);
+      if (!isNaN(v)) sums[row.tag] = (sums[row.tag] || 0) + v; });
+    const keys = Object.keys(sums);
+    if (keys.length > 1) h += '<div class="msum">' + keys.map(k =>
+      '<span><b>' + esc(k) + '</b> ' + fmtNum(sums[k]) + '</span>').join('')
+      + '</div>';
+    h += g.rows.map(row => '<div class="mrow"><span class="mtag" style="background:'
+      + ac + '1a;color:' + ac + '">' + esc(row.tag) + '</span><span class="mname" '
+      + 'title="' + esc(row.name) + '">' + esc(row.name)
+      + '</span><span class="amt">' + esc(row.amount) + '</span><span class="exp">'
+      + esc(row.expire) + '</span></div>').join('');
+  } else {
+    h += '<div class="mnote">' + esc(g.note || '暂无明细') + '</div>';
+  }
+  document.getElementById('mbody').innerHTML = h;
 }
 function closeDetail(){ document.getElementById('mask').style.display = 'none'; }
 """
