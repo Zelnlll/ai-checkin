@@ -222,3 +222,18 @@ def test_inbox_replace_twice_is_idempotent(tmp_path):
     store.import_inbox()
     # 模拟并发：文件已被改名，再跑一轮不许抛
     store.import_inbox()
+
+
+def test_concurrent_upserts_all_survive(tmp_path):
+    import threading
+    store = CredentialStore(tmp_path, {'wps'})
+    store.save('wps', {'cookie': 'base'})
+    threads = [threading.Thread(
+        target=store.upsert, args=('wps', {'cookie': f'c{i}'}))
+        for i in range(20)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    cookies = {a['cookie'] for a in store.load_all('wps')}
+    assert len(cookies) == 21        # 20 个并发号一个不丢

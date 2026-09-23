@@ -368,3 +368,29 @@ def test_daemon_starts_panel(monkeypatch, tmp_path):
     except KeyboardInterrupt:
         pass
     assert started.get('port') == 8000
+
+
+def test_checkin_busy_guard():
+    from app.webapp import _begin_checkin, _end_checkin
+    assert _begin_checkin('wps')
+    assert not _begin_checkin('wps')
+    _end_checkin('wps')
+    assert _begin_checkin('wps')
+    _end_checkin('wps')
+
+
+def test_panel_port_fallback_on_bad_env(monkeypatch, tmp_path):
+    import app.main as m
+    monkeypatch.setenv('PANEL_PORT', 'abc')
+    started = {}
+    monkeypatch.setattr(m, '_start_panel',
+                        lambda cfg, port: started.setdefault('port', port))
+    monkeypatch.setattr(m, '_read_marker', lambda state: '9999-12-31 23:59')
+    monkeypatch.setattr(m.time, 'sleep', lambda s: (_ for _ in ()).throw(
+        KeyboardInterrupt()))
+    cfg = Config((10, 5), 3, '', tmp_path)
+    try:
+        m.cmd_daemon(cfg)
+    except KeyboardInterrupt:
+        pass
+    assert started.get('port') == 8000

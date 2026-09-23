@@ -10,11 +10,15 @@ import contextlib
 import datetime as dt
 import json
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Any
 
 from app.platforms.base import CheckinResult
+
+# 进程内互斥：合并单容器后多线程共享 pid，文件锁超时兜底时串行化读-改-写
+_MEM = threading.Lock()
 
 
 def _key(platform: str, account: str) -> str:
@@ -27,7 +31,14 @@ class DailyState:
 
     @contextlib.contextmanager
     def _locked(self):
-        """跨进程读改写锁（daemon/web 双容器共享卷）；10s 陈旧自动破锁。"""
+        """进程内锁 + 跨进程文件锁（tmp 名带线程 id 双保险）。"""
+        with _MEM:
+            with self._file_locked():
+                yield
+
+    @contextlib.contextmanager
+    def _file_locked(self):
+        """跨进程读改写锁（共享卷）；10s 陈旧自动破锁。"""
         lock = self._file.with_suffix('.lock')
         lock.parent.mkdir(parents=True, exist_ok=True)
         deadline = time.time() + 5
@@ -67,7 +78,8 @@ class DailyState:
 
     def _save(self, data: dict) -> None:
         self._file.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self._file.with_name(f'{self._file.name}.{os.getpid()}.tmp')
+        tmp = self._file.with_name(f'{self._file.name}.{os.getpid()}'
+                                   f'.{threading.get_native_id()}.tmp')
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding='utf-8')
         tmp.replace(self._file)
 

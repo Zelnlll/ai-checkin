@@ -11,6 +11,7 @@ from __future__ import annotations
 import datetime as dt
 import html as html_mod
 import json
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
@@ -520,6 +521,24 @@ def render_settings(status: dict[str, Any]) -> str:
 </div></div></body></html>"""
 
 
+_BUSY: set[str] = set()
+_BUSY_LOCK = threading.Lock()
+
+
+def _begin_checkin(platform: str) -> bool:
+    """同平台签到防重入:面板连点不再并发打官方接口。"""
+    with _BUSY_LOCK:
+        if platform in _BUSY:
+            return False
+        _BUSY.add(platform)
+        return True
+
+
+def _end_checkin(platform: str) -> None:
+    with _BUSY_LOCK:
+        _BUSY.discard(platform)
+
+
 class _Handler(BaseHTTPRequestHandler):
     def _json(self, obj: dict, code: int = 200) -> None:
         body = json.dumps(obj, ensure_ascii=False).encode('utf-8')
@@ -608,12 +627,18 @@ class _Handler(BaseHTTPRequestHandler):
             store.upsert(platform, fields, acct_id=acct_id)
             self._json({'ok': True, 'message': '已导入'})
         elif head.endswith('/api/checkin'):
-            from app.main import cmd_run_once
-            outcomes = cmd_run_once(cfg, platforms=[platform], store=store,
-                                    state=state, notifier=_NoopNotifier())
-            r = outcomes[0].result
-            self._json({'ok': r.state in ('ok', 'already'),
-                        'state': r.state, 'message': r.message})
+            if not _begin_checkin(platform):
+                self._json({'ok': False, 'message': '该平台正在签到中'}, 409)
+                return
+            try:
+                from app.main import cmd_run_once
+                outcomes = cmd_run_once(cfg, platforms=[platform], store=store,
+                                        state=state, notifier=_NoopNotifier())
+                r = outcomes[0].result
+                self._json({'ok': r.state in ('ok', 'already'),
+                            'state': r.state, 'message': r.message})
+            finally:
+                _end_checkin(platform)
         else:
             self._json({'ok': False, 'message': '未知接口'}, 404)
 

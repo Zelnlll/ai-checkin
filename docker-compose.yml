@@ -12,5 +12,5 @@ services:
     environment:
       - TZ=Asia/Shanghai
 
-  # v1.4.8 起面板与守护合并为单容器；如需回滚，恢复 ai-checkin-web 服务：
+  # v1.5.0 起面板与守护合并为单容器；如需回滚，恢复 ai-checkin-web 服务：
   #   ai-checkin-web: { build: ., command: ["web", "--port", "8000"], ... }

@@ -164,7 +164,8 @@ def _start_panel(cfg: Config, port: int):
 def cmd_daemon(cfg: Config) -> None:
     logger.info('守护模式启动：每日 %02d:%02d，重试 %d 次，余额每 %d 分钟刷新',
                 *cfg.checkin_time, cfg.retry_times, cfg.balance_refresh_minutes)
-    panel_port = int(os.environ.get('PANEL_PORT', '8000'))
+    raw_port = (os.environ.get('PANEL_PORT') or '').strip()
+    panel_port = int(raw_port) if raw_port.isdigit() else 8000
     try:
         _start_panel(cfg, panel_port)
         logger.info('面板已随守护启动：http://0.0.0.0:%d', panel_port)

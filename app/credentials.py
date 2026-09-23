@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import re
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,10 @@ from typing import Any
 COOKIE_ASSUMED_VALID_DAYS = 30
 
 _ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,16}$')
+
+# 进程内互斥：合并单容器后多线程共用一个 pid，文件锁超时兜底时
+# 靠它串行化同进程的读-改-写，tmp 名再带线程 id 双保险
+_MEM = threading.Lock()
 
 
 def _acct_id(creds: dict[str, Any]) -> str:
@@ -64,38 +69,40 @@ class CredentialStore:
 
     @contextlib.contextmanager
     def _locked(self):
-        """凭证目录跨进程锁；未持锁不许 rmdir，避免偷删别人的锁。"""
-        self._cred_dir.mkdir(parents=True, exist_ok=True)
-        lock = self._cred_dir / '.lock'
-        deadline = time.time() + 5
-        held = False
-        while True:
+        """进程内锁 + 凭证目录跨进程锁；未持锁不许 rmdir，避免偷删别人的锁。"""
+        with _MEM:
+            self._cred_dir.mkdir(parents=True, exist_ok=True)
+            lock = self._cred_dir / '.lock'
+            deadline = time.time() + 5
+            held = False
+            while True:
+                try:
+                    os.mkdir(lock)
+                    held = True
+                    break
+                except FileExistsError:
+                    try:
+                        if time.time() - lock.stat().st_mtime > 10:
+                            os.rmdir(lock)
+                            continue
+                    except OSError:
+                        pass
+                    if time.time() > deadline:
+                        break      # 拿不到锁也工作：宁可冒竞态不冒停摆
+                    time.sleep(0.05)
             try:
-                os.mkdir(lock)
-                held = True
-                break
-            except FileExistsError:
-                try:
-                    if time.time() - lock.stat().st_mtime > 10:
+                yield
+            finally:
+                if held:
+                    try:
                         os.rmdir(lock)
-                        continue
-                except OSError:
-                    pass
-                if time.time() > deadline:
-                    break          # 拿不到锁也工作：宁可冒竞态不冒停摆
-                time.sleep(0.05)
-        try:
-            yield
-        finally:
-            if held:
-                try:
-                    os.rmdir(lock)
-                except OSError:
-                    pass
+                    except OSError:
+                        pass
 
     def _write(self, platform: str, accounts: list[dict[str, Any]]) -> None:
         target = self._file(platform)
-        tmp = target.with_name(f'{target.name}.{os.getpid()}.tmp')
+        tmp = target.with_name(f'{target.name}.{os.getpid()}'
+                               f'.{threading.get_native_id()}.tmp')
         tmp.write_text(json.dumps({'accounts': accounts}, ensure_ascii=False,
                                   indent=1), encoding='utf-8')
         tmp.replace(target)
@@ -170,13 +177,14 @@ class CredentialStore:
         self.clear(platform)
 
     def clear(self, platform: str) -> dict[str, Any]:
-        for p in (self._file(platform),
-                  self._inbox / f'{platform}.json',
-                  self._inbox / f'{platform}.json.imported'):
-            try:
-                p.unlink()
-            except OSError:
-                pass
+        with _MEM:
+            for p in (self._file(platform),
+                      self._inbox / f'{platform}.json',
+                      self._inbox / f'{platform}.json.imported'):
+                try:
+                    p.unlink()
+                except OSError:
+                    pass
         return {'cleared': True, 'message': f'{platform} 凭证已清空'}
 
     def import_inbox(self) -> list[tuple[str, str]]:
