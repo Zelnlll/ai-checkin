@@ -63,13 +63,14 @@ def build_textcard(outcomes: list[CheckinOutcome], today: str) -> dict[str, Any]
                   else r.reward or (r.message if r.state == 'busy' else '已签到'))
         detail = _compact(detail)
         name = _SHORT_TITLES.get(_title(o), _title(o))
+        # 定稿列序：余额｜连签｜到期积分
         extras = []
-        if r.expiring:
-            extras.append(r.expiring.replace(' · ', '·'))
         if r.balance:
             extras.append(f'余{r.balance}')
         if r.streak >= 2:
             extras.append(f'连{r.streak}天')
+        if r.expiring:
+            extras.append(r.expiring.replace(' · ', '·'))
         lines.append(f'{_dot(o)} {name} {detail}'[:40])
         if extras:
             lines.append('　' + '｜'.join(extras))

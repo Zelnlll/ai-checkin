@@ -122,7 +122,7 @@ def test_textcard_line_shows_balance_and_streak(adapters_registered):
                                             balance='2592', streak=3)),
     ], '2026-09-22')
     d = msg['textcard']['description']
-    assert '🔸 WPS 灵犀 +100' in d and '　余2592｜连3天' in d
+    assert '🔸 WPS 灵犀 +100' in d and '　余2592｜连3天' in d  # 无到期只出两项
 
 
 def test_textcard_omits_absent_extras(adapters_registered):
@@ -185,7 +185,8 @@ def test_textcard_two_line_compact_layout():
     lines = d.split(chr(10))
     assert lines[1].startswith('🔸') and '积分' not in lines[1]
     assert lines[2].startswith('　')            # 第二行全角缩进对齐
-    assert '100·09-30到期｜余2592｜连3天' in lines[2]
+    # 定稿列序：余额｜连签｜到期积分
+    assert lines[2] == '　余2592｜连3天｜100·09-30到期'
 
 
 def test_textcard_single_line_when_no_extras():
