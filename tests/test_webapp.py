@@ -197,5 +197,6 @@ def test_status_accounts_expose_hash_and_uid(tmp_path):
     status = collect_status(cfg, store, state, PLATFORMS)
     mm = next(p for p in status['platforms'] if p['platform'] == 'minimax')
     a = mm['accounts'][0]
-    assert len(a['hash']) == 8 and a['uid'] == '777'
+    assert len(a['hashes']) == 1 and len(a['hashes'][0]) == 8
+    assert a['uid'] == '777'
     assert 'token' not in a and 'cookie' not in a   # 不回显凭证
