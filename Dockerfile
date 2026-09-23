@@ -8,6 +8,10 @@ COPY app/ app/
 # fnOS 上 git 写出的文件权限会是 000，构建期兜底修正（与源端 chmod 无关）
 RUN chmod -R a+rX app/
 
+# daocloud 转发的 playwright/python 基座缺 python 包本体，自装（版本对齐 /ms-playwright 浏览器）
+RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ \
+    --trusted-host mirrors.aliyun.com playwright==1.49.0
+
 ENV PYTHONPATH=/app \
     TZ=Asia/Shanghai \
     DATA_DIR=/data \
