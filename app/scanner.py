@@ -8,13 +8,12 @@ from __future__ import annotations
 
 import json
 import os
-import re
 from pathlib import Path
 
 _COOKIE_PLATFORMS = {'wps', 'dazi'}
 # wb-switch 存储键 → 本项目平台键（agent_ext.rs 里搭子的 key 是 dumate）
 _KEY_ALIASES = {'dumate': 'dazi'}
-_SUPPORTED = {'wps', 'dazi', 'minimax', 'qoder', 'linkai', 'trae'}
+_SUPPORTED = {'wps', 'dazi', 'minimax', 'qoder', 'trae'}
 
 
 def scan_local_accounts(inbox: Path, home: Path | None = None,
@@ -52,11 +51,6 @@ def scan_local_accounts(inbox: Path, home: Path | None = None,
             if sdk.startswith('ms-'):
                 creds['token'] = sdk
             found.append(_write(inbox, 'modelscope', creds))
-    linkai_jwt = _extract_linkai_jwt(appdata, home)
-    if linkai_jwt:   # 桌面客户端完整 JWT 优先，覆盖浏览器残缺版
-        _write(inbox, 'linkai', {'token': linkai_jwt})
-        if 'linkai' not in found:
-            found.append('linkai')
     wb = _read_workbuddy_auth(localappdata, appdata, home)
     if wb:
         _write(inbox, 'workbuddy', wb)
@@ -95,30 +89,6 @@ def _read_workbuddy_auth(localappdata: Path | None, appdata: Path | None,
             creds['enterprise_id'] = str(account['enterpriseId'])
         return creds
     return {}
-
-
-def _extract_linkai_jwt(appdata: Path | None, home: Path) -> str:
-    appdata = Path(appdata) if appdata else Path(
-        os.environ.get('APPDATA') or home / 'AppData' / 'Roaming')
-    ldb = appdata / 'LinkAI' / 'Local Storage' / 'leveldb'
-    if not ldb.is_dir():
-        return ''
-    best = ''
-    for f in ldb.iterdir():
-        try:
-            raw = f.read_bytes()
-        except OSError:
-            continue
-        idx = 0
-        while True:
-            i = raw.find(b'linkai_jwt', idx)
-            if i < 0:
-                break
-            m = re.search(rb'eyJ[A-Za-z0-9_.-]{20,}', raw[i:i + 8192])
-            if m and len(m.group()) > len(best):
-                best = m.group().decode('ascii')
-            idx = i + 1
-    return best
 
 
 def _write(inbox: Path, platform: str, creds: dict) -> str:

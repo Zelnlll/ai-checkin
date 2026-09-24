@@ -25,7 +25,7 @@ from app.state import DailyState
 
 _ACCENTS = {
     'wps': '#22b14c', 'dazi': '#3b82f6', 'minimax': '#8b5cf6',
-    'qoder': '#ca8a04', 'modelscope': '#f59e0b', 'linkai': '#06b6d4',
+    'qoder': '#ca8a04', 'modelscope': '#f59e0b',
     'workbuddy': '#38bdf8', 'trae': '#2dd4bf',
 }
 _PILL = {
@@ -43,7 +43,6 @@ _CRED_FIELDS = {
     'qoder': [('token', 'Bearer 后的 dt- 设备令牌（抓包 openapi.qoder.com.cn）')],
     'modelscope': [('cookie', '会话 Cookie 整串（含 m_session_id）'),
                    ('token', 'SDK 令牌（ms- 开头，个人中心）')],
-    'linkai': [('token', 'JWT（扫描客户端自动获取，或 F12 console.log(localStorage.token)）')],
     'trae': [('token', 'Cloud-IDE-JWT（扫描 Trae 桌面端自动获取，或按 agent-auto-signin 从 storage.json 解密）')],
     'workbuddy': [('token', 'accessToken（扫描桌面端自动获取）'),
                   ('uid', 'X-User-Id'), ('enterprise_id', '企业 ID（可选）')],

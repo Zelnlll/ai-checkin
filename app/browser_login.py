@@ -20,10 +20,6 @@ PLATFORM_LOGIN: dict[str, dict[str, Any]] = {
     'minimax': {'url': 'https://agent.minimaxi.com/', 'local_storage': 'token',
                 'web_session': True,
                 'capture': {'url': 'minimax-cloud', 'header': 'token'}},
-    'linkai': {'url': 'https://link-ai.tech/console/account',
-               'local_storage': 'token',
-               'capture': {'url': 'link-ai.tech/api', 'header': 'authorization',
-                           'strip': 'Bearer '}},
 }
 
 

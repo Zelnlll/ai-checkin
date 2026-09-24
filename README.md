@@ -1,6 +1,6 @@
 # AI 平台每日自动签到（Docker 版）
 
-每天定时为 **WPS灵犀 / MiniMax Code / 百度搭子 / Qoder / 魔搭 / Link AI / WorkBuddy / TraeWork**
+每天定时为 **WPS灵犀 / MiniMax Code / 百度搭子 / Qoder / 魔搭 / WorkBuddy / TraeWork**
 自动签到，
 结果通过企业微信群机器人卡片推送。适配器架构：**新增一个平台 = 在 `app/platforms/`
 加一个文件 + 注册表 import 一行**。
@@ -33,7 +33,7 @@
 git clone <本仓库> ai-checkin && cd ai-checkin
 cp .env.example .env        # 填 WECOM_WEBHOOK 等
 docker compose up -d --build
-docker compose exec ai-checkin python -m app.main status   # 五平台凭证与今日状态
+docker compose exec ai-checkin python -m app.main status   # 各平台凭证与今日状态
 # 浏览器打开 http://NAS_IP:8000 查看网页面板（web 容器）
 ```
 
@@ -45,7 +45,6 @@ docker compose exec ai-checkin python -m app.main status   # 五平台凭证与�
 | 百度搭子 | 同上 `login dazi` | 登录 `console.bce.baidu.com` F12 复制 Cookie（需含 `bce-user-info`） |
 | MiniMax | 同上 `login minimax`（自动抓 Cookie+localStorage token） | F12 复制任意请求头 `token`（JWT） |
 | 魔搭 | 同上 `login modelscope`；或 PC 端 `python tools/win_client_extract.py` 从 `~/.wb-switch/modelscope_login.json` 提取 | SDK 令牌（ms- 开头）在魔搭个人中心复制 |
-| Link AI | 同上 `login linkai`；扫描按钮自动抓客户端 leveldb 完整 JWT | F12 `console.log(localStorage.token)`（JWT，约 31 天） |
 | Qoder | 不支持网页登录 | 抓包 `openapi.qoder.com.cn` 任意请求，复制 `Authorization: Bearer` 后的串（约 10 天由客户端轮换，过期重贴） |
 | WorkBuddy | 不支持网页登录 | `scan` 自动读 `%LOCALAPPDATA%\CodeBuddyExtension\...\workbuddy-desktop.info`（需桌面端已登录） |
 | TraeWork | 不支持网页登录 | `scan` 自动读 wb-switch 捕获的桌面端登录态（`agent_accounts.json` 的 trae 条目） |
@@ -78,7 +77,7 @@ data/
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest            # 174 项，全离线（本地回环假服务器 + 真实报文黄金样本）
+python -m pytest            # 277 项，全离线（本地回环假服务器 + 真实报文黄金样本）
 ```
 
 ## 版本发布

@@ -3,6 +3,23 @@
 遵循语义化版本（SemVer）。版本号单一来源：`app/__init__.py` 的 `__version__`；
 发版流程 = 改版本号 + 更新本文件 + `git tag vX.Y.Z` + push main 与 tags。
 
+## v1.6.0 — 2026-09-24
+
+### 破坏性变更：移除 LinkAI 平台
+- 删 `app/platforms/linkai.py` 与注册表 import（面板卡片由 8 张变 7 张，
+  Trae/WorkBuddy 顺次前移）；`scanner._extract_linkai_jwt`、`browser_login`
+  的 `linkai` 登录条目、`webapp` 的色表与凭证字段表条目一并删除。
+- PC 端 `tools/push_panel.py` 的 `--no-wb` 不再读 LinkAI 桌面端 leveldb，
+  `tools/la_web_probe.py` 一次性探针脚本删除。
+- 数据不清理也不会报错：面板/守护的遍历源头都是 `ADAPTERS`，
+  `credentials.py` 的 inbox 导入按在册平台过滤，未知平台 POST 明确回 404。
+  NAS 卷里遗留的 `data/credentials/linkai.json`、`state.json` 的 linkai 历史
+  按用户决定一并清掉（清理动作在部署时执行，见 PC 端记录）。
+- 测试：删 `tests/test_linkai.py`（8 项）与 `tests/test_scanner.py` 的两个
+  linkai 用例；`test_browser_login.py` 里借 LinkAI 当样本的 3 个 capture 用例
+  改成中立假域名保留覆盖。全量 277 项绿。
+- 顺带：README 的平台清单/凭证表去掉 Link AI，测试计数 174 → 277（原先失真）。
+
 ## v1.5.5 — 2026-09-23
 
 ### 新功能：多账号身份路由（配合 PC 推送工具）

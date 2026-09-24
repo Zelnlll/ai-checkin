@@ -9,9 +9,9 @@ class FakeReq:
 
 MM_SPEC = {'url': 'x', 'local_storage': 'token', 'web_session': True,
            'capture': {'url': 'minimax-cloud', 'header': 'token'}}
-LA_SPEC = {'url': 'x', 'local_storage': 'token',
-           'capture': {'url': 'link-ai.tech/api', 'header': 'authorization',
-                       'strip': 'Bearer '}}
+BEARER_SPEC = {'url': 'x', 'local_storage': 'token',
+               'capture': {'url': 'api.demo.test', 'header': 'authorization',
+                           'strip': 'Bearer '}}
 
 
 def test_capture_minimax_token_and_user_id():
@@ -22,37 +22,37 @@ def test_capture_minimax_token_and_user_id():
     assert captured['token'] == 'eyJJWT-MM' and captured['user_id'] == 'U9'
 
 
-def test_capture_linkai_bearer_authorization():
+def test_capture_bearer_authorization_strips_prefix():
     captured = {}
-    req = FakeReq('https://link-ai.tech/api/chat/web/app/user/get/balance',
+    req = FakeReq('https://api.demo.test/chat/web/app/user/get/balance',
                   {'authorization': 'Bearer eyJJWT-LA'})
-    _capture_request(LA_SPEC, captured, req)
+    _capture_request(BEARER_SPEC, captured, req)
     assert captured['token'] == 'eyJJWT-LA'
 
 
 def test_capture_rejects_non_jwt_and_anon_bearer():
     captured = {}
     for junk in ('Bearer', 'Bearer undefined', 'Bearer 123'):
-        _capture_request(LA_SPEC, captured,
-                         FakeReq('https://link-ai.tech/api/a',
+        _capture_request(BEARER_SPEC, captured,
+                         FakeReq('https://api.demo.test/a',
                                  {'authorization': junk}))
     assert captured == {}
-    _capture_request(LA_SPEC, captured,
-                     FakeReq('https://link-ai.tech/api/b',
+    _capture_request(BEARER_SPEC, captured,
+                     FakeReq('https://api.demo.test/b',
                              {'authorization': 'Bearer eyJreal'}))
     assert captured['token'] == 'eyJreal'
 
 
 def test_capture_ignores_other_urls_and_first_wins():
     captured = {}
-    _capture_request(LA_SPEC, captured,
-                     FakeReq('https://link-ai.tech/console/account',
+    _capture_request(BEARER_SPEC, captured,
+                     FakeReq('https://console.demo.test',
                              {'authorization': 'Bearer eyJX'}))
     assert captured == {}
-    _capture_request(LA_SPEC, captured,
-                     FakeReq('https://link-ai.tech/api/a', {'authorization': 'Bearer eyJT1'}))
-    _capture_request(LA_SPEC, captured,
-                     FakeReq('https://link-ai.tech/api/b', {'authorization': 'Bearer eyJT2'}))
+    _capture_request(BEARER_SPEC, captured,
+                     FakeReq('https://api.demo.test/a', {'authorization': 'Bearer eyJT1'}))
+    _capture_request(BEARER_SPEC, captured,
+                     FakeReq('https://api.demo.test/b', {'authorization': 'Bearer eyJT2'}))
     assert captured['token'] == 'eyJT1'
 
 
