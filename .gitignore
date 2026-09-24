@@ -6,3 +6,7 @@ data/
 report_preview.png
 data_demo/
 panel_*.png
+
+# 面板访问令牌：只留在本机，绝不入库（.bat 是启动器，不含凭证）
+.panel_token
+tools/.panel_token
