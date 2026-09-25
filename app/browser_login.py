@@ -21,10 +21,15 @@ BROWSER_UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
 # 或跳转中途的半截 Cookie 被静默导出（2026-09-25 百度搭子事故）。
 PLATFORM_LOGIN: dict[str, dict[str, Any]] = {
     'wps': {'url': 'https://lingxi.kdocs.cn/', 'cookie': 'wps_sid',
-            'verify': {'url': 'https://lingxi.kdocs.cn/api/public/v1/tasks'}},
+            'verify': {'url': 'https://lingxi.kdocs.cn/api/public/v1/tasks',
+                       'headers': {'Referer': 'https://lingxi.kdocs.cn/',
+                                   'Origin': 'https://lingxi.kdocs.cn'}}},
     'dazi': {'url': 'https://console.bce.baidu.com/', 'cookie': 'bce-user-info',
              'verify': {'url': 'https://console.bce.baidu.com/api/dumate/points/loginBonusInfo',
-                        'headers_from_cookie': {'csrftoken': 'bce-user-info'}}},
+                        'csrf_cookie': 'bce-user-info',
+                        'headers': {'Origin': 'https://console.bce.baidu.com',
+                                    'Referer': 'https://console.bce.baidu.com/',
+                                    'X-Requested-With': 'XMLHttpRequest'}}},
     'modelscope': {'url': 'https://www.modelscope.cn/', 'cookie': 'm_session_id'},
     'minimax': {'url': 'https://agent.minimaxi.com/', 'local_storage': 'token',
                 'web_session': True,
@@ -78,14 +83,27 @@ def _default_fetch(url: str, headers: dict[str, str]) -> str:
     req = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=10) as r:
-            return r.read(2048).decode('utf-8', 'replace')
+            return r.read(8192).decode('utf-8', 'replace')
     except Exception:
         return ''
 
 
+def _envelope_ok(body: str) -> bool:
+    """JSON 且业务信封未报鉴权失败才算票有效。
+
+    真机失效形态是 HTTP 200 + {"code":302,"message":"need login"}（与
+    baidu_dazi._unwrap 同一事实），只查首字符会放走过期票。
+    """
+    s = body.strip()
+    if s[:1] not in ('{', '['):
+        return False
+    m = re.search(r'"code"\s*:\s*"?(-?\d+)', s)
+    return not m or m.group(1) in ('0', '200')
+
+
 def _verify_cookie(spec: dict[str, Any], creds: dict[str, str],
                    fetch=None) -> bool:
-    """有 verify 端点就真验一次：响应必须是 JSON 才算票有效（HTML=被打回登录页）。"""
+    """有 verify 端点就真验一次：请求头与平台适配器同源，响应须过信封校验。"""
     v = spec.get('verify')
     if not v:
         return True
@@ -94,12 +112,13 @@ def _verify_cookie(spec: dict[str, Any], creds: dict[str, str],
         return False
     headers = {'Cookie': cookie, 'Accept': 'application/json',
                'User-Agent': BROWSER_UA}
-    for hdr, name in (v.get('headers_from_cookie') or {}).items():
-        m = re.search(rf'(?:^|; ){re.escape(name)}=([^;]*)', cookie)
-        if m:
-            headers[hdr] = m.group(1).strip().strip('"').strip('\\')
-    body = ((fetch or _default_fetch)(v['url'], headers) or '').lstrip()
-    return body[:1] in ('{', '[')
+    headers.update(v.get('headers') or {})
+    if v.get('csrf_cookie'):
+        from app.platforms.baidu_dazi import derive_csrf
+        csrf = derive_csrf(cookie)
+        if csrf:
+            headers['csrftoken'] = csrf
+    return _envelope_ok((fetch or _default_fetch)(v['url'], headers) or '')
 
 
 def _ready(spec: dict[str, Any], creds: dict[str, str] | None,
@@ -143,11 +162,16 @@ def browser_login(cfg, platform: str, headful: bool = False) -> int:
         page.goto(spec['url'], wait_until='domcontentloaded')
         deadline = time.time() + timeout_s
         found: dict[str, str] | None = None
+        verified: dict[str, bool] = {}    # cookie 快照串 -> 服务端校验结果（同串不重发）
         while time.time() < deadline:
             creds = _extract_state(context, captured.get('token', ''))
-            if _ready(spec, creds):
-                found = creds
-                break
+            if creds:
+                key = json.dumps(creds, sort_keys=True)
+                if key not in verified:      # 同一快照只发一次校验，不每 2s 打平台
+                    verified[key] = _ready(spec, creds)
+                if verified[key]:
+                    found = creds
+                    break
             if headful:
                 time.sleep(2)
                 continue

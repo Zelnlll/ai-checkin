@@ -3,6 +3,18 @@
 遵循语义化版本（SemVer）。版本号单一来源：`app/__init__.py` 的 `__version__`；
 发版流程 = 改版本号 + 更新本文件 + `git tag vX.Y.Z` + push main 与 tags。
 
+## v1.6.1 — 2026-09-25
+
+### 修复：百度搭子 Cookie 误导出与推送裂号（09-25 事故）
+- `browser_login` 新增服务端验票（`_ready`/`_verify_cookie`/`_envelope_ok`）：
+  关键 Cookie 命中后须再打一次平台只读接口、响应 JSON 信封 code∈{0,200} 才导出；
+  堵死两类事故——storage_state 过期票静默导出、登录跳转中途半截 Cookie（缺 `bce-*`）导出。
+  dazi/wps 配 verify（请求头与适配器同源，csrftoken 复用 `derive_csrf`），
+  minimax/modelscope 暂无实证只读端点不配。同一凭证快照只验一次，不每 2s 打平台。
+- `tools/push_panel.py`：无 JWT uid 的 Cookie 凭证一律 `id=main` 钉死主账号原位刷新，
+  绝不按票哈希裂出副账号；按 ADAPTERS 过滤面板已下架平台（linkai 不再白报 HTTPError）；
+  `--list` 预览拉取面板失败时给出警告。推送工具、bat 与使用说明随本次入库。
+
 ## v1.6.0 — 2026-09-24
 
 ### 破坏性变更：移除 LinkAI 平台

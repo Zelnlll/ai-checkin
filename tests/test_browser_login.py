@@ -96,16 +96,22 @@ def test_none_creds_is_false():
 
 # ---- 登录票据服务端校验（2026-09-25 半截/过期 Cookie 误导出回归）----
 
-from app.browser_login import _ready  # noqa: E402
+from app.browser_login import PLATFORM_LOGIN, _ready  # noqa: E402
 
-DAZI_SPEC = {'url': 'https://console.bce.baidu.com/', 'cookie': 'bce-user-info',
-             'verify': {'url': 'https://console.bce.baidu.com/api/dumate/points/loginBonusInfo',
-                        'headers_from_cookie': {'csrftoken': 'bce-user-info'}}}
-GOOD = {'cookie': 'BDUSS=b; bce-user-info=TOKENVAL; bce-sessionid=S1'}
+DAZI_SPEC = PLATFORM_LOGIN['dazi']
+GOOD = {'cookie': r'BDUSS=b; bce-user-info=\"u-12345-abc\"; bce-sessionid=S1'}
+
+
+def test_platform_specs_pinned():
+    """Cookie 平台必须带 verify；minimax/modelscope 刻意不配（无实证只读端点）。"""
+    assert PLATFORM_LOGIN['dazi']['verify']['url'].startswith('https://')
+    assert PLATFORM_LOGIN['wps']['verify']['url'].startswith('https://')
+    assert 'verify' not in PLATFORM_LOGIN['minimax']
+    assert 'verify' not in PLATFORM_LOGIN['modelscope']
 
 
 def test_ready_rejects_when_server_says_html():
-    """storage_state 里 Cookie 全在但服务端已作废：必须判未就绪，绝不静默导出残票。"""
+    """storage_state 里 Cookie 全在但服务端打回登录页：判未就绪，绝不静默导出。"""
     calls = []
 
     def fetch(url, headers):
@@ -115,15 +121,22 @@ def test_ready_rejects_when_server_says_html():
     assert calls and calls[0][0] == DAZI_SPEC['verify']['url']
 
 
-def test_ready_accepts_json_and_derives_csrf_header():
+def test_ready_rejects_revoked_json_envelope():
+    """真机形态：HTTP 200 + {"code":302,"message":"need login"} 也必须是未就绪。"""
+    assert not _ready(DAZI_SPEC, GOOD,
+                      lambda u, h: '{"code":302,"message":"need login","result":null}')
+
+
+def test_ready_accepts_json_and_derives_csrf_and_site_headers():
     seen = {}
 
     def fetch(url, headers):
         seen.update(headers)
         return '{"code":0,"result":{"hasIssued":true}}'
     assert _ready(DAZI_SPEC, GOOD, fetch)
-    assert seen['csrftoken'] == 'TOKENVAL'
+    assert seen['csrftoken'] == 'u-12345-abc'      # 与 derive_csrf 同规则（去转义引号）
     assert 'bce-sessionid=S1' in seen['Cookie']
+    assert seen.get('Origin') and seen.get('Referer')   # 与适配器同发的站点头
 
 
 def test_ready_marker_absent_skips_network():

@@ -285,9 +285,12 @@ def main() -> int:
         return 1
     print(f'目标面板：{url}')
     panel = _panel_state(url)
-    if not panel and '--list' not in args:
-        print('拉取面板账号状态失败（网络/密码？），中止推送防止重复建号')
-        return 1
+    if not panel:
+        if '--list' in args:
+            print('拉取面板账号状态失败（网络/密码？），以下路由结果不准确')
+        else:
+            print('拉取面板账号状态失败（网络/密码？），中止推送防止重复建号')
+            return 1
     bad = 0
     for platform, body in items:
         rid = _route_id(platform, body, panel)
