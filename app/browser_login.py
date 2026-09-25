@@ -8,14 +8,23 @@ storage_state 存 DATA_DIR/browser/<platform>.json，有效时静默刷新 Cooki
 from __future__ import annotations
 
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any
 
+BROWSER_UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+              '(KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36')
+
 # 登录页 / 判定登录成功的关键 Cookie / 归属域（minimax 的 token 存 localStorage）
+# verify：拿关键 Cookie 真发一次只读请求，防"storage_state 里票还在、服务端已作废"
+# 或跳转中途的半截 Cookie 被静默导出（2026-09-25 百度搭子事故）。
 PLATFORM_LOGIN: dict[str, dict[str, Any]] = {
-    'wps': {'url': 'https://lingxi.kdocs.cn/', 'cookie': 'wps_sid'},
-    'dazi': {'url': 'https://console.bce.baidu.com/', 'cookie': 'bce-user-info'},
+    'wps': {'url': 'https://lingxi.kdocs.cn/', 'cookie': 'wps_sid',
+            'verify': {'url': 'https://lingxi.kdocs.cn/api/public/v1/tasks'}},
+    'dazi': {'url': 'https://console.bce.baidu.com/', 'cookie': 'bce-user-info',
+             'verify': {'url': 'https://console.bce.baidu.com/api/dumate/points/loginBonusInfo',
+                        'headers_from_cookie': {'csrftoken': 'bce-user-info'}}},
     'modelscope': {'url': 'https://www.modelscope.cn/', 'cookie': 'm_session_id'},
     'minimax': {'url': 'https://agent.minimaxi.com/', 'local_storage': 'token',
                 'web_session': True,
@@ -64,6 +73,41 @@ def _login_done(spec: dict[str, Any], creds: dict[str, str] | None) -> bool:
     return bool(spec.get('local_storage')) and spec['local_storage'] in creds
 
 
+def _default_fetch(url: str, headers: dict[str, str]) -> str:
+    import urllib.request
+    req = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return r.read(2048).decode('utf-8', 'replace')
+    except Exception:
+        return ''
+
+
+def _verify_cookie(spec: dict[str, Any], creds: dict[str, str],
+                   fetch=None) -> bool:
+    """有 verify 端点就真验一次：响应必须是 JSON 才算票有效（HTML=被打回登录页）。"""
+    v = spec.get('verify')
+    if not v:
+        return True
+    cookie = creds.get('cookie', '')
+    if not cookie:
+        return False
+    headers = {'Cookie': cookie, 'Accept': 'application/json',
+               'User-Agent': BROWSER_UA}
+    for hdr, name in (v.get('headers_from_cookie') or {}).items():
+        m = re.search(rf'(?:^|; ){re.escape(name)}=([^;]*)', cookie)
+        if m:
+            headers[hdr] = m.group(1).strip().strip('"').strip('\\')
+    body = ((fetch or _default_fetch)(v['url'], headers) or '').lstrip()
+    return body[:1] in ('{', '[')
+
+
+def _ready(spec: dict[str, Any], creds: dict[str, str] | None,
+           fetch=None) -> bool:
+    return bool(creds) and _login_done(spec, creds) \
+        and _verify_cookie(spec, creds, fetch)
+
+
 def browser_login(cfg, platform: str, headful: bool = False) -> int:
     spec = PLATFORM_LOGIN.get(platform)
     if spec is None:
@@ -101,7 +145,7 @@ def browser_login(cfg, platform: str, headful: bool = False) -> int:
         found: dict[str, str] | None = None
         while time.time() < deadline:
             creds = _extract_state(context, captured.get('token', ''))
-            if _login_done(spec, creds):
+            if _ready(spec, creds):
                 found = creds
                 break
             if headful:
@@ -111,13 +155,14 @@ def browser_login(cfg, platform: str, headful: bool = False) -> int:
             shot = browser_dir / f'login_stuck_{platform}.png'
             page.screenshot(path=str(shot))
             browser.close()
-            print(f'无头登录失败（需要人工交互），截图：{shot}')
+            print(f'无头登录失败（需人工登录，或 storage_state 里的票已被服务端作废），'
+                  f'截图：{shot}')
             print('请在 PC 端运行：python -m app.main login '
                   f'{platform} --headful，然后把 inbox 文件拷入容器。')
             return 3
         if not found:
             browser.close()
-            print(f'登录超时（{timeout_s}s），未检测到关键 Cookie')
+            print(f'登录超时（{timeout_s}s），未检测到通过服务端校验的有效登录')
             return 3
         context.storage_state(path=str(state_file))
         browser.close()

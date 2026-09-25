@@ -92,3 +92,47 @@ def test_token_type_no_cookie_key_in_spec():
 
 def test_none_creds_is_false():
     assert not _login_done({'cookie': 'a'}, None)
+
+
+# ---- 登录票据服务端校验（2026-09-25 半截/过期 Cookie 误导出回归）----
+
+from app.browser_login import _ready  # noqa: E402
+
+DAZI_SPEC = {'url': 'https://console.bce.baidu.com/', 'cookie': 'bce-user-info',
+             'verify': {'url': 'https://console.bce.baidu.com/api/dumate/points/loginBonusInfo',
+                        'headers_from_cookie': {'csrftoken': 'bce-user-info'}}}
+GOOD = {'cookie': 'BDUSS=b; bce-user-info=TOKENVAL; bce-sessionid=S1'}
+
+
+def test_ready_rejects_when_server_says_html():
+    """storage_state 里 Cookie 全在但服务端已作废：必须判未就绪，绝不静默导出残票。"""
+    calls = []
+
+    def fetch(url, headers):
+        calls.append((url, headers))
+        return '<!DOCTYPE html><html>login'
+    assert not _ready(DAZI_SPEC, GOOD, fetch)
+    assert calls and calls[0][0] == DAZI_SPEC['verify']['url']
+
+
+def test_ready_accepts_json_and_derives_csrf_header():
+    seen = {}
+
+    def fetch(url, headers):
+        seen.update(headers)
+        return '{"code":0,"result":{"hasIssued":true}}'
+    assert _ready(DAZI_SPEC, GOOD, fetch)
+    assert seen['csrftoken'] == 'TOKENVAL'
+    assert 'bce-sessionid=S1' in seen['Cookie']
+
+
+def test_ready_marker_absent_skips_network():
+    def fetch(url, headers):
+        raise AssertionError('marker 未命中不该发校验请求')
+    assert not _ready(DAZI_SPEC, {'cookie': 'a=1'}, fetch)
+
+
+def test_ready_no_verify_spec_passes_like_before():
+    """token 型平台（minimax）无 verify：行为与旧版一致。"""
+    spec = {'url': 'x', 'local_storage': 'token'}
+    assert _ready(spec, {'token': 'eyJabc'}, lambda u, h: '{}')
